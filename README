@@ -1,1 +1,1 @@
-OpenGL utils.
+Utils for programming OpenGL 3.0+ in Python. It give you something like 'glRotate', 'gluLookAt', 'glOrtho'.

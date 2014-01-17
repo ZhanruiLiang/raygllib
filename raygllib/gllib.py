@@ -1,6 +1,8 @@
 import OpenGL.GL as gl
+from collections import namedtuple
 from OpenGL.arrays import vbo
 import numpy as np
+from contextlib import contextmanager
 
 def compile_shader(source, shaderType):
     """
@@ -18,9 +20,10 @@ def compile_shader(source, shaderType):
         raise Exception('GLSL compile error: {}'.format(shaderType))
     return shader
 
+BufferItem = namedtuple('BufferItem', 'loc size type buf')
 
 class Program:
-    def __init__(self, shader_datas):
+    def __init__(self, shader_datas, bufs):
         """
         shader_datas: A list of (filename, shaderType) tuples.
         """
@@ -38,23 +41,38 @@ class Program:
                 gl.glDeleteShader(shader)
         assert self.check_linked()
         assert self.check_valid()
+        self._init_buffers(bufs)
 
-        self._buffers = {}
+    def __del__(self):
+        gl.glDeleteVertexArrays(1, [self.vao])
 
-    def init_buffers(self, bufs):
+    def _init_buffers(self, bufs):
         """
         bufs: [(name, size, type)]
         """
+        self._buffers = {}
+        self.vao = gl.glGenVertexArrays(1)
+        gl.glBindVertexArray(self.vao)
+
         for name, size, type in bufs:
             loc = self.get_attrib_loc(name)
-            self._buffers[name] = loc, size, type, vbo.VBO(np.zeros(0))
+            self._buffers[name] = BufferItem(loc, size, type, vbo.VBO(np.zeros(0)))
 
     def set_buffer(self, name, data):
         loc, size, type, buf = self._buffers[name]
         buf.set_array(data)
         buf.bind()
-        gl.glEnableVertexAttribArray(loc)
         gl.glVertexAttribPointer(loc, size, type, gl.GL_FALSE, 0, None)
+
+    @contextmanager
+    def batch_draw(self):
+        self.use()
+        for loc, size, type, buf in self._buffers.values():
+            gl.glEnableVertexAttribArray(loc)
+        yield
+        for item in self._buffers.values():
+            gl.glDisableVertexAttribArray(item.loc)
+        self.unuse()
 
     def draw(self, primitive_type, count):
         gl.glDrawArrays(primitive_type, 0, count)
@@ -105,8 +123,6 @@ class Program:
 
 
 class TextureUnit:
-    ENUMS = [gl.GL_TEXTURE0, gl.GL_TEXTURE1, gl.GL_TEXTURE2, gl.GL_TEXTURE3]  # FIXME
-
     def __init__(self, id):
         self.id = id
-        self.glenum = self.ENUMS[id]
+        self.glenum = getattr(gl, 'GL_TEXTURE' + str(id))
