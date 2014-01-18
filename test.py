@@ -12,7 +12,7 @@ program = Program([
     ('simple.f.glsl', GL_FRAGMENT_SHADER),
     ('simple.v.glsl', GL_VERTEX_SHADER),
 ], [
-    ('vertex_pos', 2, GL_FLOAT),
+    ('vertex_pos', 2, GL_FLOAT, GL_STATIC_DRAW),
 ])
 
 points = np.array([
