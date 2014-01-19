@@ -41,10 +41,9 @@ class VertexBuffer:
         return state
 
     def __setstate__(self, state_dict):
-        print('set state')
         self.__dict__ = state_dict
         self.usageHint = globals()[self.usageHint]
-        self.set_data(self.data)
+        self._set_data(self.data)
 
     def __len__(self):
         return len(self.data)
@@ -117,10 +116,14 @@ class Program:
         self.use()
         for buf in self._buffers.values():
             glEnableVertexAttribArray(buf.location)
+        self.prepare_draw()
         yield
         for buf in self._buffers.values():
             glDisableVertexAttribArray(buf.location)
         self.unuse()
+
+    def prepare_draw(self):
+        pass
 
     def draw(self, primitive_type, count):
         glDrawArrays(primitive_type, 0, count)
