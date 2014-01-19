@@ -1,6 +1,5 @@
-import OpenGL.GL as gl
-from collections import namedtuple
-import numpy as np
+from OpenGL.GL import *
+# import numpy as np
 from contextlib import contextmanager
 
 def compile_shader(source, shaderType):
@@ -8,141 +7,170 @@ def compile_shader(source, shaderType):
     source: str source code
     shaderType: GL_VERTEX_SHADER, GL_FRAGMENT_SHADER or GL_GEOMETRY_SHADER
     """
-    shader = gl.glCreateShader(shaderType)
-    gl.glShaderSource(shader, source)
-    gl.glCompileShader(shader)
-    result = gl.glGetShaderiv(shader, gl.GL_COMPILE_STATUS)
-    info = gl.glGetShaderInfoLog(shader).decode('utf-8')
+    shader = glCreateShader(shaderType)
+    glShaderSource(shader, source)
+    glCompileShader(shader)
+    result = glGetShaderiv(shader, GL_COMPILE_STATUS)
+    info = glGetShaderInfoLog(shader).decode('utf-8')
     if info:
         print('Shader compilation info:\n{}'.format(info))
-    if result == gl.GL_FALSE:
+    if result == GL_FALSE:
         raise Exception('GLSL compile error: {}'.format(shaderType))
     return shader
 
 class VertexBuffer:
-    def __init__(self, location, item_size, data_type, usage_hint):
+    def __init__(self, data, usage_hint=GL_STATIC_DRAW):
+        """
+        :param data: Data that to be put into buffer
+        :type data: numpy.ndarray
+        :param usage_hint: The last parameter of glBufferData
+        :type usage_hint: GLenum
+        """
+        self.usageHint = usage_hint
+        self._set_data(data)
+
+    def _set_data(self, data):
+        self.data = data
+        self.bufferId = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, self.bufferId)
+        glBufferData(GL_ARRAY_BUFFER, data, self.usageHint)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['usageHint'] = repr(self.usageHint)
+        return state
+
+    def __setstate__(self, state_dict):
+        print('set state')
+        self.__dict__ = state_dict
+        self.usageHint = globals()[self.usageHint]
+        self.set_data(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __del__(self):
+        try:
+            glDeleteBuffers(1, [self.bufferId])
+        except TypeError:
+            # OpenGL is destroyed.
+            pass
+
+
+class VertexBufferSlot:
+    def __init__(self, location, item_size, data_type):
         self.location = location
         self.itemSize = item_size
         self.dataType = data_type
-        self.usage_hint = usage_hint
-        self.bufferId = gl.glGenBuffers(1)
 
-    def __del__(self):
-        gl.glDeleteBuffers(1, [self.bufferId])
+    def set_buffer(self, buffer):
+        glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferId)
+        glVertexAttribPointer(
+            self.location, self.itemSize, self.dataType, GL_FALSE, 0, None)
 
-    def set_data(self, data):
-        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.bufferId)
-        gl.glBufferData(gl.GL_ARRAY_BUFFER, data, self.usage_hint)
-
-    def bind(self):
-        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.bufferId)
-        gl.glVertexAttribPointer(
-            self.location, self.itemSize, self.dataType, gl.GL_FALSE, 0, None)
-
-BufferItem = namedtuple('BufferItem', 'loc size type buf')
 
 class Program:
     def __init__(self, shader_datas, bufs):
         """
         shader_datas: A list of (filename, shaderType) tuples.
         """
-        self.id = gl.glCreateProgram()
+        self.id = glCreateProgram()
         shaders = []
         try:
             for name, type in shader_datas:
                 source = open(name, 'r').read()
                 shader = compile_shader(source, type)
-                gl.glAttachShader(self.id, shader)
+                glAttachShader(self.id, shader)
                 shaders.append(shader)
-            gl.glLinkProgram(self.id)
+            glLinkProgram(self.id)
         finally:
             for shader in shaders:
-                gl.glDeleteShader(shader)
+                glDeleteShader(shader)
         assert self.check_linked()
         assert self.check_valid()
         self._init_buffers(bufs)
 
     def __del__(self):
-        gl.glBindVertexArray(0)
-        gl.glDeleteVertexArrays(1, [self.vao])
+        try:
+            glDeleteVertexArrays(1, [self.vao])
+        except TypeError:
+            # OpenGL is destroyed.
+            pass
 
     def _init_buffers(self, bufs):
         """
-        bufs: [(name, size, type, usage)]
+        bufs: [(name, size, type)]
         """
         self._buffers = {}
-        self.vao = gl.glGenVertexArrays(1)
-        gl.glBindVertexArray(self.vao)
+        self.vao = glGenVertexArrays(1)
+        glBindVertexArray(self.vao)
 
-        for name, size, type, usage in bufs:
+        for name, size, type in bufs:
             loc = self.get_attrib_loc(name)
-            self._buffers[name] = VertexBuffer(loc, size, type, usage)
+            self._buffers[name] = VertexBufferSlot(loc, size, type)
 
     def set_buffer(self, name, data):
-        buf = self._buffers[name]
-        buf.set_data(data)
+        self._buffers[name].set_buffer(data)
 
     @contextmanager
     def batch_draw(self):
         self.use()
         for buf in self._buffers.values():
-            gl.glEnableVertexAttribArray(buf.location)
+            glEnableVertexAttribArray(buf.location)
         yield
         for buf in self._buffers.values():
-            gl.glDisableVertexAttribArray(buf.location)
+            glDisableVertexAttribArray(buf.location)
         self.unuse()
 
     def draw(self, primitive_type, count):
-        for buf in self._buffers.values():
-            buf.bind()
-        gl.glDrawArrays(primitive_type, 0, count)
+        glDrawArrays(primitive_type, 0, count)
 
     def get_uniform_loc(self, name):
         if isinstance(name, str):
             name = name.encode('utf-8')
-        loc = gl.glGetUniformLocation(self.id, name)
+        loc = glGetUniformLocation(self.id, name)
         assert loc >= 0, 'Get uniform {} failed'.format(name)
         return loc
 
     def get_attrib_loc(self, name):
         if isinstance(name, str):
             name = name.encode('utf-8')
-        loc = gl.glGetAttribLocation(self.id, name)
+        loc = glGetAttribLocation(self.id, name)
         assert loc >= 0, 'Get attribute {} failed'.format(name)
         return loc
 
     def print_info(self):
-        info = gl.glGetProgramInfoLog(self.id).decode('ascii')
+        info = glGetProgramInfoLog(self.id).decode('ascii')
         if info:
             print('Program info log:', info)
 
     def check_valid(self):
-        gl.glValidateProgram(self.id)
-        result = gl.glGetProgramiv(self.id, gl.GL_VALIDATE_STATUS)
-        if result == gl.GL_FALSE:
+        glValidateProgram(self.id)
+        result = glGetProgramiv(self.id, GL_VALIDATE_STATUS)
+        if result == GL_FALSE:
             self.print_info()
             return False
         return True
 
     def check_linked(self):
-        result = gl.glGetProgramiv(self.id, gl.GL_LINK_STATUS)
-        if result == gl.GL_FALSE:
+        result = glGetProgramiv(self.id, GL_LINK_STATUS)
+        if result == GL_FALSE:
             self.print_info()
             return False
         return True
 
     def use(self):
-        gl.glUseProgram(self.id)
+        glUseProgram(self.id)
 
     def unuse(self):
-        gl.glUseProgram(0)
+        glUseProgram(0)
 
     def delete(self):
         if self.id != 0:
-            gl.glDeleteProgram(self.id)
+            glDeleteProgram(self.id)
 
 
 class TextureUnit:
     def __init__(self, id):
         self.id = id
-        self.glenum = getattr(gl, 'GL_TEXTURE' + str(id))
+        self.glenum = globals()['GL_TEXTURE' + str(id)]

@@ -52,6 +52,7 @@ class TestMatlib(unittest.TestCase):
             self.assertTrue(np.allclose(pn, p1n))
             l1 = np.linalg.norm(pt, 2)
             l2 = np.linalg.norm(p1t, 2)
+            print(l1, l2)
             self.assertTrue(self.equal(l1, l2))
             self.assertTrue(self.equal(np.dot(pt, p1t) / (l1 * l2), np.cos(angle)))
 

@@ -1,1 +1,1 @@
-from .gllib import Program, TextureUnit
+from .gllib import Program, VertexBuffer, TextureUnit
