@@ -4,7 +4,7 @@ import crash_on_ipy
 import raygllib.matlib as M
 import raygllib.utils as utils
 from raygllib.camera import Camera
-import raygllib.objreader as objreader
+import raygllib.modellib as modellib
 import threading
 
 # Create OpenGL context and window
@@ -14,18 +14,18 @@ window = pyglet.window.Window(width=800, height=600, resizable=True,
 glEnable(GL_DEPTH_TEST)
 glClearColor(.9, .9, .9, 1.)
 
-program = objreader.ModelRenderer()
-program.add_light(objreader.Light((2., 2., 20.), (1., 1., 1.), 800))
-program.add_light(objreader.Light((-2., 2., 10.), (1., 1., 1.), 800))
+program = modellib.ModelRenderer()
+program.add_light(modellib.Light((2., 2., 20.), (1., 1., 1.), 600))
+program.add_light(modellib.Light((-2., 2., 10.), (1., 1., 1.), 400))
 
 modelMat = M.scale(1).dot(M.identity())
 cam = Camera((3, 2, 5), (0, .0, 0), (0, 1, 0))
 projMat = M.identity()
 
 with utils.timeit_context('load model'):
-    # model = objreader.load('tests/cube.obj')
-    model = objreader.load('/home/ray/graduate/src/models/men.obj')
-    # model = objreader.load('tests/cone.obj')
+    # model = modellib.load('tests/cube.obj')
+    # model = modellib.load('/home/ray/graduate/src/models/men.obj')
+    model = modellib.load('/home/ray/graduate/src/models/men-ani.obj')
 
 
 def update(dt):
@@ -51,10 +51,13 @@ fpsDisplay = pyglet.clock.ClockDisplay()
 def on_draw():
     window.clear()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
     with program.batch_draw():
         program.set_MVP(modelMat, cam.viewMat, projMat)
         program.draw_model(model)
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
     fpsDisplay.draw()
 
 # window.push_handlers(pyglet.window.event.WindowEventLogger())

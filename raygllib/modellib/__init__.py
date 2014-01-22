@@ -182,8 +182,21 @@ def load(filename, force_reload=False):
         pickle.dump(meta, outfile, -1)
     return result
 
-# @profile
+
 def _load(filename):
+    name, ext = os.path.splitext(filename)
+    ext = ext.lower()
+    if ext == '.obj':
+        return _load_obj(filename)
+    elif ext == '.dae':
+        return _load_collada(filename)
+
+
+def _load_collada(filename):
+    pass
+
+
+def _load_obj(filename):
     dir, name = os.path.split(filename)
     with open(filename, 'r') as infile:
         tmpVs = tmpVs = []  # temperary vertices

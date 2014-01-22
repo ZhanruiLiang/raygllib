@@ -4,8 +4,9 @@ setup(
     description='OpenGL utils',
     author='Ray',
     author_email='ray040123@gmail.com',
-    packages=['raygllib', 'raygllib.objreader'],
+    packages=['raygllib', 'raygllib.modellib'],
     package_data={
-        'raygllib.objreader': ['*.glsl']
+        'raygllib.modellib': ['*.glsl'],
+        'raygllib': ['shaders/*.glsl'],
     },
 )

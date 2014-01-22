@@ -21,10 +21,8 @@ def compile_shader(source, shaderType):
 class VertexBuffer:
     def __init__(self, data, usage_hint=GL_STATIC_DRAW):
         """
-        :param data: Data that to be put into buffer
-        :type data: numpy.ndarray
-        :param usage_hint: The last parameter of glBufferData
-        :type usage_hint: GLenum
+        :param numpy.ndarray data: Data that to be put into buffer
+        :param GLenum usage_hint: The last parameter of glBufferData
         """
         self.usageHint = usage_hint
         self._set_data(data)
