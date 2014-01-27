@@ -5,6 +5,7 @@ from .render import Renderer
 from .camera import Camera
 from . import matlib
 from . import utils
+from .utils import debug
 import collada
 import pyglet
 
@@ -16,29 +17,41 @@ def load_scene(path):
     for node in mesh.scene.nodes:
         matrix = node.matrix
         node = node.children[0]
+        debug(type(node))
         if isinstance(node, collada.scene.CameraNode):
             # camera = Camera(pos, (0, 0, 0), up)
             # scene.camera.append(camera)
             pass
         elif isinstance(node, collada.scene.GeometryNode):
             geom = node.geometry
+            debug('load geometry:', geom.name)
             poly = geom.primitives[0]
             daeMat = mesh.materials[poly.material]
-            image = daeMat.effect.diffuse.sampler.surface.image.getImage()
+            if hasattr(daeMat.effect.diffuse, 'sampler'):
+                diffuse = daeMat.effect.diffuse.sampler.surface.image.getImage()
+                indexTupleSize = 3
+                diffuseType = Material.DIFFUSE_TEXTURE
+            else:
+                indexTupleSize = 2
+                diffuse = daeMat.effect.diffuse[:3]
+                diffuseType = Material.DIFFUSE_COLOR
             material = Material(
-                daeMat.name, image,
-                Ka=daeMat.effect.ambient[:3],
+                daeMat.name, diffuseType, diffuse,
+                Ka=(daeMat.effect.ambient[:3]\
+                    if not isinstance(daeMat.effect.ambient, collada.material.Map) else (0., 0., 0.)),
                 Ks=daeMat.effect.specular[:3],
-
                 shininess=daeMat.effect.shininess,
             )
+            index = poly.index.flatten()
+            index = index.reshape((len(index) // indexTupleSize, indexTupleSize))
             model = Model(
-                poly.vertex[poly.index[:, 0]],
-                poly.normal[poly.index[:, 1]],
-                poly.texcoordset[0][poly.index[:, 2]],
+                poly.vertex[index[:, 0]],
+                poly.normal[index[:, 1]],
+                (poly.texcoordset[0][index[:, 2]] if indexTupleSize == 3 else None),
                 material,
                 matrix,
             )
+            # assert False
             scene.models.append(model)
         elif isinstance(node, collada.scene.LightNode):
             daeLight = node.light
@@ -48,8 +61,11 @@ def load_scene(path):
 
 
 class Viewer:
+    FPS = 60
+
     def __init__(self, path):
-        window = pyglet.window.Window(width=800, height=600, resizable=True,
+        self.window = window = pyglet.window.Window(
+            width=800, height=600, resizable=False, vsync=True,
             config=pyglet.gl.Config(sample_buffers=1, samples=4))
         glEnable(GL_DEPTH_TEST)
         glClearColor(.9, .9, .9, 1.)
@@ -76,26 +92,51 @@ class Viewer:
         def on_resize(w, h):
             self.projMat = matlib.ortho_view(-w / h, w / h, -1, 1, 0, 100)
 
-        fpsDisplay = pyglet.clock.ClockDisplay()
+        self.fpsDisplay = pyglet.clock.ClockDisplay()
 
         @window.event
         def on_draw():
-            window.clear()
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-            R = self.renderer
-            with R.batch_draw():
-                R.set_matrix('viewMat', self.camera.viewMat)
-                R.set_matrix('projMat', self.projMat)
-                self.scene.draw(self.renderer)
+            self.draw()
 
-            fpsDisplay.draw()
+        @window.event
+        def on_key_press(key, modifiers):
+            self.on_key_press(key, modifiers)
+
+        pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
+
+    def on_key_press(self, key, modifiers):
+        K = pyglet.window.key
+        C = self.camera
+        func = {
+            K._1: C.front_view, K._2: C.back_view,
+            K._3: C.left_view, K._4: C.right_view,
+            K._5: C.top_view, K._6: C.bottom_view,
+        }.get(key, None)
+        if func:
+            func()
+
+    def update(self, dt):
+        self.camera.update(dt)
+
+    def draw(self):
+        self.window.clear()
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glEnable(GL_DEPTH_TEST)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+        R = self.renderer
+        with R.batch_draw():
+            R.set_matrix('viewMat', self.camera.viewMat)
+            R.set_matrix('projMat', self.projMat)
+            self.scene.draw(self.renderer)
+
+        glDisable(GL_DEPTH_TEST)
+        self.fpsDisplay.draw()
 
     def show(self):
         pyglet.app.run()
 
     def add_light_auto(self):
-        pass
+        self.scene.lights.append(Light((10., 10., 10.), (1., 1., 1.), 500))
 
     def add_camera_auto(self):
         pass

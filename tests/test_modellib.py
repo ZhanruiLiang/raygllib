@@ -24,8 +24,8 @@ projMat = M.identity()
 
 with utils.timeit_context('load model'):
     # model = modellib.load('tests/cube.obj')
-    # model = modellib.load('/home/ray/graduate/src/models/men.obj')
-    model = modellib.load('/home/ray/graduate/src/models/men-ani.obj')
+    model = modellib.load('/home/ray/graduate/src/models/men.obj')
+    # model = modellib.load('/home/ray/graduate/src/models/men-ani.obj')
 
 
 def update(dt):

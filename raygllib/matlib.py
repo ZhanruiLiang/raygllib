@@ -1,6 +1,17 @@
 import numpy as np
 from OpenGL.GL import GLfloat
 
+def vec3_to_vec4(v):
+    return np.hstack([v, 1.])
+
+def vec3_to_vec4_n(v):
+    return np.hstack([v, 0.])
+
+def vec4_to_vec3(v):
+    if v[3] == 0:
+        return v[:3]
+    return v[:3] / v[3]
+
 def scale(x, y=None, z=None):
     if y is None:
         y = z = x
@@ -34,7 +45,8 @@ def rotate(angle, center, axis):
     return mat
 
 def normalized(a):
-    return a / np.dot(a, a) ** .5
+    d = np.dot(a, a) ** .5
+    return a / (d if d != 0 else 1)
 
 def look_at(eye, center, up):
     z = normalized(eye - np.array(center))

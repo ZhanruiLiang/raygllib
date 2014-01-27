@@ -6,11 +6,13 @@ uniform vec3 lightPosCamSpace[MaxLightCount];
 uniform vec3 lightColor[MaxLightCount];
 uniform float lightPower[MaxLightCount];
 uniform int nLights;
+uniform vec3 diffuse;
 uniform vec3 Ka;
 uniform vec3 Ks;
 uniform float shininess;
 
 uniform sampler2D textureSampler;
+uniform bool hasSampler;
 uniform mat4 viewMat, modelMat;
 in vec2 uv;
 in vec3 normalCamSpace;
@@ -28,7 +30,12 @@ vec3 homo_dir_to_vec3(const in vec4 p) {
 
 void main() {
     vec3 normalCamSpace1 = normalize(normalCamSpace);
-    vec3 mtlDiffuseColor = texture(textureSampler, vec2(uv.s, 1 - uv.t)).rgb;
+    vec3 mtlDiffuseColor;
+    if(hasSampler) {
+        mtlDiffuseColor = texture(textureSampler, vec2(uv.s, 1 - uv.t)).rgb;
+    } else {
+        mtlDiffuseColor = diffuse;
+    }
     vec3 eyeVectorCamSpace = normalize(-posCamSpace);
 
     fragColor = vec3(0, 0, 0);

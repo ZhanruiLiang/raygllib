@@ -30,9 +30,16 @@ class Renderer(Program):
         glUniformMatrix4fv(self.get_uniform_loc(name), 1, GL_TRUE, mat)
 
     def set_material(self, material):
-        glActiveTexture(self.textureUnit.glenum)
-        glBindTexture(GL_TEXTURE_2D, material.textureId)
-        glUniform1i(self.get_uniform_loc('textureSampler'), self.textureUnit.id)
+        if material.diffuseType == material.DIFFUSE_TEXTURE:
+            glActiveTexture(self.textureUnit.glenum)
+            glBindTexture(GL_TEXTURE_2D, material.textureId)
+            glUniform1i(self.get_uniform_loc('hasSampler'), 1)
+            glUniform1i(self.get_uniform_loc('textureSampler'), self.textureUnit.id)
+        else:
+            glBindTexture(GL_TEXTURE_2D, 0)
+            glUniform1i(self.get_uniform_loc('hasSampler'), 0)
+            glUniform3f(self.get_uniform_loc('diffuse'), *material.diffuse)
+
         glUniform1f(self.get_uniform_loc('shininess'), material.shininess)
         glUniform3f(self.get_uniform_loc('Ka'), *material.Ka)
         glUniform3f(self.get_uniform_loc('Ks'), *material.Ks)
@@ -50,7 +57,11 @@ class Renderer(Program):
     def draw_model(self, model):
         self.set_buffer('vertexPos', model.vertices)
         self.set_buffer('vertexNormal', model.normals)
-        self.set_buffer('vertexUV', model.texcoords)
+        if model.texcoords:
+            glEnableVertexAttribArray(self._buffers['vertexUV'].location)
+            self.set_buffer('vertexUV', model.texcoords)
+        else:
+            glDisableVertexAttribArray(self._buffers['vertexUV'].location)
         self.set_material(model.material)
         self.set_matrix('modelMat', model.matrix)
         self.draw(GL_TRIANGLES, len(model.vertices))
