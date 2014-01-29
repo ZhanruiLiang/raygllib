@@ -1,5 +1,6 @@
 build/
 __pycache__
+__modeldump__/
 .*.sw[onp]
 *.pyc
 doc
@@ -16,3 +17,9 @@ doc
 /tests/cone.obj
 /tests/cube.mtl
 /tests/cube.obj
+/raygllib/tags
+/raygllib/ui/base.py
+/raygllib/ui/__init__.py
+/tests/test_ui.py
+/tests/tex1.png
+/tests/xx.png
