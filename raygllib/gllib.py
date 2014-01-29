@@ -1,6 +1,9 @@
 from OpenGL.GL import *
 # import numpy as np
 from contextlib import contextmanager
+from threading import RLock
+from . import utils
+
 
 def compile_shader(source, shaderType):
     """
@@ -18,7 +21,56 @@ def compile_shader(source, shaderType):
         raise Exception('GLSL compile error: {}'.format(shaderType))
     return shader
 
-class VertexBuffer:
+class GLResource:
+    def __init__(self, method, args):
+        self.method = method
+        self.args = args
+
+    def free(self):
+        if self.method is None:
+            return
+        utils.debug('delete resource', self, trace=True)
+        self.method(*self.args)
+        self.method = None
+
+    def __del__(self):
+        assert self.method is None
+
+class Texture2D(GLResource):
+    MAG_FILTER = GL_LINEAR
+    MIN_FILTER = GL_LINEAR_MIPMAP_LINEAR
+
+    def __init__(self, image):
+        self.textureId = self.make_texture(image)
+        GLResource.__init__(self, glDeleteTextures, ([self.textureId],))
+
+        glBindTexture(GL_TEXTURE_2D, self.textureId)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, self.MAG_FILTER)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, self.MIN_FILTER)
+        glGenerateMipmap(GL_TEXTURE_2D)
+
+    def make_texture(self, image):
+        data = image.convert('RGBA').tobytes()
+        width, height = image.size
+        glEnable(GL_TEXTURE_2D)
+        textureId = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, textureId)
+        assert textureId > 0, 'Fail to get new texture id.'
+        glTexImage2D(
+            GL_TEXTURE_2D, 0,
+            GL_RGBA,  # internal format
+            width, height,
+            0,  # border, must be 0
+            GL_RGBA,  # input data format
+            GL_UNSIGNED_BYTE,
+            data,
+        )
+        return textureId
+
+
+class VertexBuffer(GLResource):
     def __init__(self, data, usage_hint=GL_STATIC_DRAW):
         """
         :param numpy.ndarray data: Data that to be put into buffer
@@ -26,6 +78,7 @@ class VertexBuffer:
         """
         self.usageHint = usage_hint
         self._set_data(data)
+        GLResource.__init__(self, glDeleteBuffers, (1, [self.bufferId]))
 
     def _set_data(self, data):
         self.data = data
@@ -45,13 +98,6 @@ class VertexBuffer:
 
     def __len__(self):
         return len(self.data)
-
-    def __del__(self):
-        try:
-            glDeleteBuffers(1, [self.bufferId])
-        except TypeError:
-            # OpenGL is destroyed.
-            pass
 
 
 class VertexBufferSlot:
@@ -177,9 +223,9 @@ class Program:
         glUseProgram(0)
 
     def delete(self):
-        if self.id != 0:
+        if self.id is not None:
             glDeleteProgram(self.id)
-
+            self.id = None
 
 class TextureUnit:
     def __init__(self, id):

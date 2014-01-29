@@ -1,7 +1,9 @@
 from gi.repository import Gtk, Gdk
 from gi.repository import GLib
-from threading import Thread, RLock
+from threading import Thread, RLock, current_thread
 from .model import Light
+from .utils import debug
+from ._threadutils import Require
 
 class LightPosSpinButton(Gtk.SpinButton):
     def __init__(self, value):
@@ -9,13 +11,21 @@ class LightPosSpinButton(Gtk.SpinButton):
         super().__init__(
             adjustment=Gtk.Adjustment(value, -R, R, .05), numeric=True, digits=3)
 
-class Control(Gtk.Frame):
+class GridControl(Gtk.Frame):
     def __init__(self, label):
-        super().__init__(border_width=2)
+        super().__init__(label=label, border_width=2)
         self.grid = Gtk.Grid(column_spacing=5, border_width=5)
         self.add(self.grid)
 
-class PropsControl(Control):
+
+class BoxControl(Gtk.Frame):
+    def __init__(self, label):
+        super().__init__(label=label, border_width=2)
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.add(self.box)
+
+
+class PropsControl(GridControl):
     def __init__(self, label, props):
         super().__init__(label)
         self.widgets = {}
@@ -40,7 +50,7 @@ class LightControl(PropsControl):
             ('y', LightPosSpinButton, dict(value=light.pos[1])),
             ('z', LightPosSpinButton, dict(value=light.pos[2])),
         ]
-        super().__init__('Light Control', props)
+        super().__init__('', props)
         widgets = self.widgets
         widgets['x'].connect('value-changed', self.update_pos, 0)
         widgets['y'].connect('value-changed', self.update_pos, 1)
@@ -88,7 +98,7 @@ class MaterialControl(PropsControl):
         if material.diffuseType == material.DIFFUSE_COLOR:
             props.append(
                 ('diffuse', ColorAdjust, dict(target=material, prop='diffuse')))
-        super().__init__('Material Control', props)
+        super().__init__('', props)
         widgets = self.widgets
         widgets['shininess'].connect('value-changed', self.update_shininess)
 
@@ -96,7 +106,7 @@ class MaterialControl(PropsControl):
         self.material.shininess = float(spin.get_value())
 
 
-class EdgesControl(Control):
+class EdgesControl(GridControl):
     def __init__(self, viewer):
         super().__init__('Edges Control')
         self.viewer = viewer
@@ -163,6 +173,55 @@ class EdgesControl(Control):
         self.edgeList.remove(row)
         self.viewer.toonRenderEdges.pop(row.get_index())
 
+class FileLoader(BoxControl):
+    RECENT_LIMIT = 5
+    MAX_HEIGHT = 5
+
+    def __init__(self, viewer):
+        super().__init__('File')
+        self.viewer = viewer
+        # Add recent chooser
+        recentFilter = Gtk.RecentFilter()
+        recentFilter.add_pattern('*.dae')
+        self.recentList = recentList = Gtk.RecentChooserWidget(
+            select_multiple=False,
+            limit=self.RECENT_LIMIT,
+            sort_type=Gtk.RecentSortType.MRU,
+            filter=recentFilter,
+        )
+        # height = min(self.MAX_HEIGHT, self.RECENT_LIMIT)
+        self.box.pack_start(recentList, True, True, 2)
+
+        # Put file chooser and load button in the same row
+        hbox = Gtk.Box()
+        self.box.pack_end(hbox, False, False, 2)
+        # Add file chooser button
+        self.fileChooser = Gtk.FileChooserButton(
+            'Select model...', action=Gtk.FileChooserAction.OPEN)
+        hbox.pack_start(self.fileChooser, False, False, 0)
+        # Add load button
+        loadButton = Gtk.Button('Load')
+        hbox.pack_end(loadButton, False, False, 0)
+        loadButton.connect('clicked', self.load)
+
+    def load(self, *args):
+        filename = self.fileChooser.get_filename()
+        if not filename:
+            item = self.recentList.get_current_item()
+            if item:
+                filename = item.get_uri_display()
+        if filename:
+            self.viewer.require.load_scene(filename)
+
+
+def _idle_add(func):
+    def new_func():
+        Gdk.threads_enter()
+        debug(func.__name__, current_thread())
+        func()
+        Gdk.threads_leave()
+    GLib.idle_add(new_func)
+
 
 class ControlPanel(Thread):
     lock = RLock()
@@ -170,6 +229,7 @@ class ControlPanel(Thread):
     def __init__(self):
         Thread.__init__(self)
         self.daemon = True
+        self.require = Require(self)
 
     def add_light(self, light):
         self._add_control('lights', LightControl, light)
@@ -177,30 +237,43 @@ class ControlPanel(Thread):
     def add_material(self, material):
         self._add_control('materials', MaterialControl, material)
 
-    def add_edges(self, viewer):
-        self._add_control('edges', EdgesControl, viewer)
+    def add_misc(self, viewer):
+        self._add_control('misc', FileLoader, viewer)
+        self._add_control('misc', EdgesControl, viewer)
 
     def _add_control(self, columnName, controlClass, *args):
-        def func():
+        @_idle_add
+        def add_control():
             control = controlClass(*args)
             control.show_all()
             column = self.columns[columnName]
-            column.pack_start(control, False, False, 5)
-        GLib.idle_add(func)
+            column.pack_start(control, False, False, 2)
 
     def run(self):
+        Gdk.threads_init()
         self.window = window = Gtk.Window(title='Control Panel')
         window.connect("delete-event", Gtk.main_quit)
         self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.columns = {
-            'edges': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
+            'misc': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
             'lights': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
             'materials': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
         }
-        for name in ('edges', 'lights', 'materials'):
+        for name in ('misc', 'lights', 'materials'):
             frame = Gtk.Frame(label=name.capitalize())
             frame.add(self.columns[name])
             self.box.pack_start(frame, False, True, 5)
         window.add(self.box)
         window.show_all()
         Gtk.main()
+        Gdk.threads_quit()
+
+    def reload(self):
+        @_idle_add
+        def reload():
+            # clear lights column
+            for child in self.columns['lights'].get_children():
+                child.destroy()
+            # clear materials column
+            for child in self.columns['materials'].get_children():
+                child.destroy()

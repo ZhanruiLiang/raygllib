@@ -1,103 +1,38 @@
 from OpenGL.GL import *
-from .model import Model, Material, Light
-from .scene import Scene
-from .render import Renderer, ShadowRenderer
-from .camera import Camera
-from . import matlib
-from . import utils
-from .utils import debug
-from .panel import ControlPanel, LightControl
-import collada
 import pyglet
 
+from .render import Renderer, ShadowRenderer
+from .camera import Camera
+from .utils import debug
+from .panel import ControlPanel
+from .scene import Scene
+from . import matlib as M
+from ._threadutils import Require
 
-def load_scene(path):
-    mesh = collada.Collada(path)
-    scene = Scene()
-
-    for node in mesh.scene.nodes:
-        matrix = node.matrix
-        node = node.children[0]
-        debug(type(node))
-        if isinstance(node, collada.scene.CameraNode):
-            # camera = Camera(pos, (0, 0, 0), up)
-            # scene.camera.append(camera)
-            pass
-        elif isinstance(node, collada.scene.GeometryNode):
-            geom = node.geometry
-            debug('load geometry:', geom.name)
-            poly = geom.primitives[0]
-            daeMat = mesh.materials[poly.material]
-            if hasattr(daeMat.effect.diffuse, 'sampler'):
-                diffuse = daeMat.effect.diffuse.sampler.surface.image.getImage()
-                indexTupleSize = 3
-                diffuseType = Material.DIFFUSE_TEXTURE
-            else:
-                indexTupleSize = 2
-                diffuse = daeMat.effect.diffuse[:3]
-                diffuseType = Material.DIFFUSE_COLOR
-            material = Material(
-                daeMat.name, diffuseType, diffuse,
-                Ka=(daeMat.effect.ambient[:3]\
-                    if not isinstance(daeMat.effect.ambient, collada.material.Map) else (0., 0., 0.)),
-                Ks=daeMat.effect.specular[:3],
-                shininess=daeMat.effect.shininess,
-            )
-            index = poly.index.flatten()
-            index = index.reshape((len(index) // indexTupleSize, indexTupleSize))
-            model = Model(
-                poly.vertex[index[:, 0]],
-                poly.normal[index[:, 1]],
-                (poly.texcoordset[0][index[:, 2]] if indexTupleSize == 3 else None),
-                material,
-                matrix,
-            )
-            debug('load model:', model)
-            # assert False
-            scene.models.append(model)
-        elif isinstance(node, collada.scene.LightNode):
-            daeLight = node.light
-            light = Light(matrix[0:3, 3], daeLight.color, 500)
-            scene.lights.append(light)
-    return scene
 
 class Viewer:
     FPS = 60
 
-    def __init__(self, path):
+    def __init__(self):
+        self.require = Require(self)
+
         self.panel = ControlPanel()
         self.panel.start()
 
         self.window = window = pyglet.window.Window(
             width=800, height=600, resizable=True, vsync=True,
-            config=pyglet.gl.Config(sample_buffers=1, samples=4, stencil_size=8))
+            config=pyglet.gl.Config(sample_buffers=1, samples=4))
         glEnable(GL_DEPTH_TEST)
         glClearColor(.9, .9, .9, 1.)
 
-        self.window = window
         self.renderer = Renderer()
-        self.projMat = matlib.identity()
+        self.projMat = M.identity()
         self.camera = Camera((0, -10, 0), (0, 0, 0), (0, 0, 1))
         self.enableToonRender = True
         self.toonRenderEdges = [0.24845, 0.36646, 0.62733, 0.96894]
 
-        self.panel.add_edges(self)
-
-        with utils.timeit_context('load model'):
-            self.scene = load_scene(path)
-
-        for light in self.scene.lights:
-            self.on_add_light(light)
-
-        materials = []
-        for model in self.scene.models:
-            material = model.material
-            if material in materials:
-                continue
-            self.panel.add_material(material)
-            materials.append(material)
-
-        self.scene.viewers.append(self)
+        self.panel.add_misc(self)
+        self.scene = None
 
         @window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
@@ -111,7 +46,7 @@ class Viewer:
 
         @window.event
         def on_resize(w, h):
-            self.projMat = matlib.ortho_view(-w / h, w / h, -1, 1, 0, 100)
+            self.projMat = M.ortho_view(-w / h, w / h, -1, 1, 0, 100)
 
         self.fpsDisplay = pyglet.clock.ClockDisplay()
 
@@ -124,6 +59,35 @@ class Viewer:
             self.on_key_press(key, modifiers)
 
         pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
+
+    def load_scene(self, path):
+        debug('load_scene')
+        scene = Scene.load(path)
+        if not scene.lights:
+            scene.add_light()
+        if scene.models:
+            self.camera.set_target(scene.models[0])
+        self.set_scene(scene)
+
+    def set_scene(self, scene):
+        if self.scene is not None:
+            self.scene.free()
+        self.scene = scene
+        self.panel.reload()
+
+        for light in self.scene.lights:
+            self.on_add_light(light)
+
+        materials = []
+        for model in self.scene.models:
+            material = model.material
+            if material in materials:
+                continue
+            debug('add material')
+            self.panel.add_material(material)
+            materials.append(material)
+
+        self.scene.viewers.append(self)
 
     def on_add_light(self, light):
         debug('on add light', light)
@@ -141,7 +105,9 @@ class Viewer:
             func()
 
     def update(self, dt):
-        self.camera.update(dt)
+        with ControlPanel.lock:
+            self.camera.update(dt)
+        self.require.resolve()
 
     def draw(self):
         self.window.clear()
@@ -166,6 +132,7 @@ class Viewer:
 
     def show(self):
         pyglet.app.run()
+
 
 class ShadowedViewer(Viewer):
     def __init__(self, *args, **kwargs):

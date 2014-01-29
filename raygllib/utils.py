@@ -5,6 +5,7 @@ import functools
 import inspect
 from contextlib import contextmanager
 from . import config
+from threading import current_thread
 
 def timeit(func):
     @functools.wraps(func)
@@ -52,24 +53,28 @@ def debug(*args, **kwargs):
     if not config.debug: 
         return 
     global _count
-    # frame = inspect.stack()[1]
-    # modules = []
-    # stacks = inspect.stack()[1:]
-    # for frame in stacks:
-    #     name = inspect.getmodule(frame[0]).__name__
-    #     if name != '__main__':
-    #         modules.append(name)
-    # if not modules:
-    #     modules.append('__main__')
-    # modules = '->'.join(x for x in reversed(modules))
+    trace = kwargs.pop('trace', False)
+    if trace:
+        frame = inspect.stack()[1]
+        modules = []
+        stacks = inspect.stack()[1:]
+        for frame in stacks:
+            name = inspect.getmodule(frame[0]).__name__
+            if name != '__main__':
+                modules.append(name)
+        if not modules:
+            modules.append('__main__')
+        modules = '->'.join(x for x in reversed(modules))
+    else:
+        module = inspect.getmodule(inspect.stack()[1][0])
+        if module:
+            modules = module.__name__
+        else:
+            modules = ''
 
     def p():
-        print('{}: [{}]:'.format(_count, modules), *args, **kwargs)
-    module = inspect.getmodule(inspect.stack()[1][0])
-    if module:
-        modules = module.__name__
-    else:
-        modules = ''
+        print('{}:{}: [{}]:'.format(
+            _count, current_thread().name, modules), *args, **kwargs)
     p()
     # kwargs['file'] = _debugLogFile
     # p()

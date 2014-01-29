@@ -1,5 +1,7 @@
 from raygllib import panel
 from raygllib.model import Light, Material
+from raygllib._threadutils import Require
+from time import sleep
 
 mainPanel = panel.ControlPanel()
 
@@ -18,8 +20,18 @@ class MockViewer:
     enableToonRender = True
     toonRenderEdges = [.5, .7, .9]
 
+    def __init__(self):
+        self.require = Require(self)
+
+    def load_scene(self, path):
+        print('load scene:', path)
+
 viewer = MockViewer()
-mainPanel.add_edges(viewer)
+mainPanel.add_misc(viewer)
 
 mainPanel.start()
-mainPanel.join()
+
+while 1:
+    with mainPanel.lock:
+        viewer.require.resolve()
+    sleep(0.02)
