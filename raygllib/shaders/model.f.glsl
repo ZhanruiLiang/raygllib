@@ -14,6 +14,9 @@ uniform float shininess;
 uniform sampler2D textureSampler;
 uniform bool hasSampler;
 uniform mat4 viewMat, modelMat;
+uniform int nEdges = 2;
+uniform float edges[5];
+
 in vec2 uv;
 in vec3 normalCamSpace;
 in vec3 posCamSpace;
@@ -28,6 +31,17 @@ vec3 homo_dir_to_vec3(const in vec4 p) {
     return p.xyz;
 }
 
+float multi_step(float x) {
+    if(nEdges == 0) 
+        return x;
+    float y = 0;
+    for(int i = 0; i < nEdges; i++) {
+        y += smoothstep(edges[i] - 0.02, edges[i], x);
+    }
+    y /= nEdges;
+    return y;
+}
+
 void main() {
     vec3 normalCamSpace1 = normalize(normalCamSpace);
     vec3 mtlDiffuseColor;
@@ -38,7 +52,7 @@ void main() {
     }
     vec3 eyeVectorCamSpace = normalize(-posCamSpace);
 
-    fragColor = vec3(0, 0, 0);
+    fragColor = Ka * mtlDiffuseColor;
     for(int i = 0; i < nLights; i++) {
         vec3 lightVectorCamSpace = lightPosCamSpace[i] - posCamSpace;
 
@@ -48,11 +62,11 @@ void main() {
         vec3 reflectLightVectorCamSpace = reflect(lightVectorCamSpace, normalCamSpace1);
 
         vec3 intensity = lightColor[i] / (dist * dist) * lightPower[i];
-        float d = clamp(dot(lightVectorCamSpace, normalCamSpace1), 0, 1);
-        float s = clamp(dot(reflectLightVectorCamSpace, eyeVectorCamSpace), 0, 1);
+        /*float d = clamp(dot(lightVectorCamSpace, normalCamSpace1), 0, 1);*/
+        /*float s = clamp(dot(reflectLightVectorCamSpace, eyeVectorCamSpace), 0, 1);*/
+        float d = multi_step(clamp(dot(lightVectorCamSpace, normalCamSpace1), 0, 1));
+        float s = multi_step(clamp(dot(reflectLightVectorCamSpace, eyeVectorCamSpace), 0, 1));
 
-        fragColor += lightColor[i] * Ka 
-            + mtlDiffuseColor * intensity * d 
-            + intensity * Ks * pow(s, shininess);
+        fragColor += mtlDiffuseColor * intensity * d + intensity * Ks * pow(s, shininess);
     }
 }

@@ -92,7 +92,6 @@ class Camera:
             M.scale(self._scale))
 
     def drag(self, dx, dy):
-        dy = 0
         axis = -dy * self.ix + dx * self.iy
         r = (dx * dx + dy * dy) ** .5
         if r < 2:

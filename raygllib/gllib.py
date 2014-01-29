@@ -112,16 +112,26 @@ class Program:
     @contextmanager
     def batch_draw(self):
         self.use()
-        for buf in self._buffers.values():
-            glEnableVertexAttribArray(buf.location)
+        self.enable_attribs()
         self.prepare_draw()
         yield
-        for buf in self._buffers.values():
-            glDisableVertexAttribArray(buf.location)
+        self.post_draw()
+        self.disable_attribs()
         self.unuse()
 
     def prepare_draw(self):
         pass
+
+    def post_draw(self):
+        pass
+
+    def enable_attribs(self):
+        for buf in self._buffers.values():
+            glEnableVertexAttribArray(buf.location)
+
+    def disable_attribs(self):
+        for buf in self._buffers.values():
+            glDisableVertexAttribArray(buf.location)
 
     def draw(self, primitive_type, count):
         glDrawArrays(primitive_type, 0, count)

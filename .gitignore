@@ -3,3 +3,16 @@ __pycache__
 .*.sw[onp]
 *.pyc
 doc
+/tests/bend.blend
+/tests/bend.blend1
+/tests/bend.blend2
+/tests/bend.dae
+/tests/bend.xmlvis
+/tests/cone.blend
+/tests/cone.blend1
+/tests/cone.blend2
+/tests/cone.dae
+/tests/cone.mtl
+/tests/cone.obj
+/tests/cube.mtl
+/tests/cube.obj

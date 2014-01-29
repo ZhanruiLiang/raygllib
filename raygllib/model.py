@@ -27,8 +27,45 @@ class Model:
         self.material = material
         self.matrix = matrix
 
+    def __repr__(self):
+        return 'Modle(nVertices={})'.format(len(self.vertices))
+
     def get_bbox(self):
         return self.bbox
+
+class Texture2D:
+    MAG_FILTER = GL_LINEAR
+    MIN_FILTER = GL_LINEAR_MIPMAP_LINEAR
+
+    def __init__(self, image):
+        self.textureId = self.make_texture(image)
+        glBindTexture(GL_TEXTURE_2D, self.textureId)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, self.MAG_FILTER)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, self.MIN_FILTER)
+        glGenerateMipmap(GL_TEXTURE_2D)
+
+    def make_texture(self, image):
+        data = image.convert('RGBA').tobytes()
+        width, height = image.size
+        glEnable(GL_TEXTURE_2D)
+        textureId = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, textureId)
+        assert textureId > 0, 'Fail to get new texture id.'
+        glTexImage2D(
+            GL_TEXTURE_2D, 0,
+            GL_RGBA,  # internal format
+            width, height,
+            0,  # border, must be 0
+            GL_RGBA,  # input data format
+            GL_UNSIGNED_BYTE,
+            data,
+        )
+        return textureId
+
+    def __del__(self):
+        glDeleteTextures([self._textureId])
 
 
 class Material:
@@ -38,27 +75,27 @@ class Material:
     DIFFUSE_COLOR = 0
     DIFFUSE_TEXTURE = 1
 
+    MAX_SHININESS = 500
+
     def __init__(self, name, diffuse_type, diffuse, **attrs):
         self.name = name
         for k, v in attrs.items():
             setattr(self, k, v)
         self.diffuseType = diffuse_type
         self.diffuse = diffuse
-        self._textureId = None
-
-    @property
-    def textureId(self):
-        if self._textureId is None:
-            self._textureId = utils.make_texture(self.diffuse, GL_TEXTURE_2D)
-            del self.diffuse
-        return self._textureId
+        if self.diffuseType == self.DIFFUSE_TEXTURE:
+            self.diffuse = Texture2D(diffuse)
 
     def __repr__(self):
         return 'Material(name={}, diffuseType={})'.format(self.name, self.diffuseType)
 
 
 class Light:
+    MAX_POWER = 5000
+    MAX_RANGE = 100
+
     def __init__(self, pos, color, power):
         self.pos = pos
         self.color = color
         self.power = power
+        self.enabled = True

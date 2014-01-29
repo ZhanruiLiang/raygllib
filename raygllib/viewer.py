@@ -1,11 +1,12 @@
 from OpenGL.GL import *
 from .model import Model, Material, Light
 from .scene import Scene
-from .render import Renderer
+from .render import Renderer, ShadowRenderer
 from .camera import Camera
 from . import matlib
 from . import utils
 from .utils import debug
+from .panel import ControlPanel, LightControl
 import collada
 import pyglet
 
@@ -51,6 +52,7 @@ def load_scene(path):
                 material,
                 matrix,
             )
+            debug('load model:', model)
             # assert False
             scene.models.append(model)
         elif isinstance(node, collada.scene.LightNode):
@@ -59,14 +61,16 @@ def load_scene(path):
             scene.lights.append(light)
     return scene
 
-
 class Viewer:
     FPS = 60
 
     def __init__(self, path):
+        self.panel = ControlPanel()
+        self.panel.start()
+
         self.window = window = pyglet.window.Window(
-            width=800, height=600, resizable=False, vsync=True,
-            config=pyglet.gl.Config(sample_buffers=1, samples=4))
+            width=800, height=600, resizable=True, vsync=True,
+            config=pyglet.gl.Config(sample_buffers=1, samples=4, stencil_size=8))
         glEnable(GL_DEPTH_TEST)
         glClearColor(.9, .9, .9, 1.)
 
@@ -74,9 +78,26 @@ class Viewer:
         self.renderer = Renderer()
         self.projMat = matlib.identity()
         self.camera = Camera((0, -10, 0), (0, 0, 0), (0, 0, 1))
+        self.enableToonRender = True
+        self.toonRenderEdges = [0.24845, 0.36646, 0.62733, 0.96894]
+
+        self.panel.add_edges(self)
 
         with utils.timeit_context('load model'):
             self.scene = load_scene(path)
+
+        for light in self.scene.lights:
+            self.on_add_light(light)
+
+        materials = []
+        for model in self.scene.models:
+            material = model.material
+            if material in materials:
+                continue
+            self.panel.add_material(material)
+            materials.append(material)
+
+        self.scene.viewers.append(self)
 
         @window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
@@ -104,6 +125,10 @@ class Viewer:
 
         pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
 
+    def on_add_light(self, light):
+        debug('on add light', light)
+        self.panel.add_light(light)
+
     def on_key_press(self, key, modifiers):
         K = pyglet.window.key
         C = self.camera
@@ -124,19 +149,66 @@ class Viewer:
         glEnable(GL_DEPTH_TEST)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         R = self.renderer
-        with R.batch_draw():
-            R.set_matrix('viewMat', self.camera.viewMat)
-            R.set_matrix('projMat', self.projMat)
-            self.scene.draw(self.renderer)
+        with ControlPanel.lock:
+            with R.batch_draw():
+                R.set_matrix('viewMat', self.camera.viewMat)
+                R.set_matrix('projMat', self.projMat)
+                if not self.enableToonRender:
+                    R.set_step_edges([])
+                else:
+                    R.set_step_edges(self.toonRenderEdges)
+                R.set_lights(self.scene.lights)
+                for model in self.scene.models:
+                    R.draw_model(model)
 
-        glDisable(GL_DEPTH_TEST)
-        self.fpsDisplay.draw()
+            glDisable(GL_DEPTH_TEST)
+            self.fpsDisplay.draw()
 
     def show(self):
         pyglet.app.run()
 
-    def add_light_auto(self):
-        self.scene.lights.append(Light((10., 10., 10.), (1., 1., 1.), 500))
+class ShadowedViewer(Viewer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.shadowRenderer = ShadowRenderer()
 
-    def add_camera_auto(self):
-        pass
+    def draw(self):
+        self.window.clear()
+        glClearColor(.0, .0, .0, 1.)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_STENCIL_TEST)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_ONE, GL_ONE)
+        glDepthFunc(GL_LEQUAL)
+
+        r1 = self.renderer
+        r2 = self.shadowRenderer
+
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE)
+        glDepthMask(GL_TRUE)
+        with r1.batch_draw():
+            r1.set_matrix('viewMat', self.camera.viewMat)
+            r1.set_matrix('projMat', self.projMat)
+            r1.set_lights(self.scene.lights)
+            for model in self.scene.models:
+                r1.draw_model(model)
+        for light in self.scene.lights:
+            with r2.batch_draw():
+                r2.set_light(light)
+                r2.set_matrix('viewMat', self.camera.viewMat)
+                r2.set_matrix('projMat', self.projMat)
+                for model in self.scene.models:
+                    r2.draw_model(model)
+            # glDisable(GL_STENCIL_TEST)
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)
+            glDepthMask(GL_TRUE)
+            with r1.batch_draw():
+                r1.set_matrix('viewMat', self.camera.viewMat)
+                r1.set_matrix('projMat', self.projMat)
+                r1.set_lights([light])
+                for model in self.scene.models:
+                    r1.draw_model(model)
+
+        glDisable(GL_DEPTH_TEST)
+        self.fpsDisplay.draw()
