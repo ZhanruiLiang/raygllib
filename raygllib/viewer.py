@@ -1,9 +1,8 @@
 from OpenGL.GL import *
 import pyglet
 
-from .render import Renderer, ShadowRenderer
+from .render import Renderer, ShadowRenderer, SilhouetteRenderer
 from .camera import Camera
-from .utils import debug
 from .panel import ControlPanel
 from .scene import Scene
 from . import matlib as M
@@ -26,10 +25,9 @@ class Viewer:
         glClearColor(.9, .9, .9, 1.)
 
         self.renderer = Renderer()
+        self.silhouetteRenderer = SilhouetteRenderer()
         self.projMat = M.identity()
         self.camera = Camera((0, -10, 0), (0, 0, 0), (0, 0, 1))
-        self.enableToonRender = True
-        self.toonRenderEdges = [0.24845, 0.36646, 0.62733, 0.96894]
 
         self.panel.add_misc(self)
         self.scene = None
@@ -61,7 +59,6 @@ class Viewer:
         pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
 
     def load_scene(self, path):
-        debug('load_scene')
         scene = Scene.load(path)
         if not scene.lights:
             scene.add_light()
@@ -83,14 +80,12 @@ class Viewer:
             material = model.material
             if material in materials:
                 continue
-            debug('add material')
             self.panel.add_material(material)
             materials.append(material)
 
         self.scene.viewers.append(self)
 
     def on_add_light(self, light):
-        debug('on add light', light)
         self.panel.add_light(light)
 
     def on_key_press(self, key, modifiers):
@@ -113,20 +108,27 @@ class Viewer:
         self.window.clear()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glEnable(GL_DEPTH_TEST)
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         R = self.renderer
+        Rs = self.silhouetteRenderer
         with ControlPanel.lock:
-            with R.batch_draw():
-                R.set_matrix('viewMat', self.camera.viewMat)
-                R.set_matrix('projMat', self.projMat)
-                if not self.enableToonRender:
-                    R.set_step_edges([])
-                else:
-                    R.set_step_edges(self.toonRenderEdges)
-                R.set_lights(self.scene.lights)
-                for model in self.scene.models:
-                    R.draw_model(model)
+            # glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+            # with R.batch_draw():
+            #     R.set_matrix('viewMat', self.camera.viewMat)
+            #     R.set_matrix('projMat', self.projMat)
+            #     R.set_lights(self.scene.lights)
+            #     for model in self.scene.models:
+            #         R.draw_model(model)
 
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+            glEnable(GL_POLYGON_OFFSET_LINE)
+            glPolygonOffset(1, 100)
+            with Rs.batch_draw():
+                Rs.set_matrix('viewMat', self.camera.viewMat)
+                Rs.set_matrix('projMat', self.projMat)
+                for model in self.scene.models:
+                    Rs.draw_model(model)
+
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
             glDisable(GL_DEPTH_TEST)
             self.fpsDisplay.draw()
 

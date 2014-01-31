@@ -1,6 +1,8 @@
 from OpenGL.GL import *
 from .gllib import VertexBuffer, Texture2D
+from .halfedge import AdjacencyVertexBuffer
 import numpy as np
+from . import utils
 
 
 def get_bound_box(vs):
@@ -15,15 +17,19 @@ def get_bound_box(vs):
 
 
 class Model:
-    def __init__(self, vertices, normals, texcoords, material, matrix):
+    def __init__(self, vertices, normals, texcoords, indices, material, matrix):
         self.bbox = get_bound_box(np.array(vertices, dtype=GLfloat))
-        self.vertices = VertexBuffer(np.array(vertices, dtype=GLfloat), GL_STATIC_DRAW)
-        self.normals = VertexBuffer(np.array(normals, dtype=GLfloat), GL_STATIC_DRAW)
+        self.vertices = VertexBuffer(
+            np.array(vertices[indices[:, 0]], dtype=GLfloat), GL_STATIC_DRAW)
+        self.normals = VertexBuffer(
+            np.array(normals[indices[:, 1]], dtype=GLfloat), GL_STATIC_DRAW)
         if texcoords is not None:
             self.texcoords = VertexBuffer(
-                np.array(texcoords, dtype=GLfloat), GL_STATIC_DRAW)
+                np.array(texcoords[indices[:, 2]], dtype=GLfloat), GL_STATIC_DRAW)
         else:
             self.texcoords = None
+        with utils.timeit_context('Build AdjacencyVertexBuffer'):
+            self.adjVertices = AdjacencyVertexBuffer(vertices, indices[:, 0])
         self.material = material
         self.matrix = matrix
 
@@ -36,6 +42,8 @@ class Model:
     def free(self):
         self.vertices.free()
         self.normals.free()
+        self.adjVertices.vertices.free()
+        self.adjVertices.indices.free()
         if self.texcoords is not None:
             self.texcoords.free()
         if self.material.diffuseType == Material.DIFFUSE_TEXTURE:

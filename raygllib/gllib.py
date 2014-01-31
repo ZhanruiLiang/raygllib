@@ -1,8 +1,7 @@
+from contextlib import contextmanager
 from OpenGL.GL import *
 # import numpy as np
-from contextlib import contextmanager
-from threading import RLock
-from . import utils
+# from . import utils
 
 
 def compile_shader(source, shaderType):
@@ -29,7 +28,7 @@ class GLResource:
     def free(self):
         if self.method is None:
             return
-        utils.debug('delete resource', self, trace=True)
+        # utils.debug('delete resource', self, trace=True)
         self.method(*self.args)
         self.method = None
 
@@ -71,6 +70,9 @@ class Texture2D(GLResource):
 
 
 class VertexBuffer(GLResource):
+    bufferId = None
+    target = GL_ARRAY_BUFFER
+
     def __init__(self, data, usage_hint=GL_STATIC_DRAW):
         """
         :param numpy.ndarray data: Data that to be put into buffer
@@ -81,23 +83,28 @@ class VertexBuffer(GLResource):
         GLResource.__init__(self, glDeleteBuffers, (1, [self.bufferId]))
 
     def _set_data(self, data):
-        self.data = data
+        assert self.bufferId is None
+        self._length = len(data)
         self.bufferId = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, self.bufferId)
-        glBufferData(GL_ARRAY_BUFFER, data, self.usageHint)
+        glBindBuffer(self.target, self.bufferId)
+        glBufferData(self.target, data, self.usageHint)
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['usageHint'] = repr(self.usageHint)
-        return state
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     state['usageHint'] = repr(self.usageHint)
+    #     return state
 
-    def __setstate__(self, state_dict):
-        self.__dict__ = state_dict
-        self.usageHint = globals()[self.usageHint]
-        self._set_data(self.data)
+    # def __setstate__(self, state_dict):
+    #     self.__dict__ = state_dict
+    #     self.usageHint = globals()[self.usageHint]
+    #     self._set_data(self.data)
 
     def __len__(self):
-        return len(self.data)
+        return self._length
+
+
+class IndexBuffer(VertexBuffer):
+    target = GL_ELEMENT_ARRAY_BUFFER
 
 
 class VertexBufferSlot:
@@ -226,6 +233,10 @@ class Program:
         if self.id is not None:
             glDeleteProgram(self.id)
             self.id = None
+
+    def set_matrix(self, name, mat):
+        glUniformMatrix4fv(self.get_uniform_loc(name), 1, GL_TRUE, mat)
+
 
 class TextureUnit:
     def __init__(self, id):

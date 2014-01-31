@@ -112,7 +112,7 @@ class EdgesControl(GridControl):
         self.viewer = viewer
 
         self.grid.attach(Gtk.Label('Enable'), 0, 0, 1, 1)
-        enable = Gtk.Switch(active=viewer.enableToonRender)
+        enable = Gtk.Switch(active=viewer.renderer.toonRenderEnable)
         enable.connect('notify::active', self.update_enable)
         insertButton = Gtk.Button('Insert')
         removeButton = Gtk.Button('Remove')
@@ -120,8 +120,8 @@ class EdgesControl(GridControl):
             self.grid.attach(widget, 1 + i, 0, 1, 1)
 
         self.edgeList = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
-        edges = viewer.toonRenderEdges
-        viewer.toonRenderEdges = []
+        edges = viewer.renderer.toonRenderEdges
+        viewer.renderer.toonRenderEdges = []
         for e in edges:
             self.insert_edge(e)
         self.grid.attach(self.edgeList, 0, 1, 4, 1)
@@ -141,7 +141,7 @@ class EdgesControl(GridControl):
         return row.get_index() if row else len(self.edgeList)
 
     def insert_edge(self, value):
-        edges = self.viewer.toonRenderEdges
+        edges = self.viewer.renderer.toonRenderEdges
         index = self.get_selected_index()
         if value is None:
             try:
@@ -157,21 +157,21 @@ class EdgesControl(GridControl):
 
     def update_enable(self, switch, *args):
         enabled = switch.get_active()
-        self.viewer.enableToonRender = enabled
+        self.viewer.renderer.toonRenderEnable = enabled
         for widget in self.grid.get_children():
             if widget is switch:
                 continue
             widget.set_sensitive(enabled)
 
     def update_value(self, index, value):
-        self.viewer.toonRenderEdges = [r.get_children()[0].get_value()
+        edges = self.viewer.renderer.toonRenderEdges = [r.get_children()[0].get_value()
             for r in self.edgeList.get_children()]
-        self.save.get_buffer().set_text(str(list(sorted(self.viewer.toonRenderEdges))))
+        self.save.get_buffer().set_text(str(list(sorted(edges))))
 
     def remove_edge(self):
         row = self.get_selected_row()
         self.edgeList.remove(row)
-        self.viewer.toonRenderEdges.pop(row.get_index())
+        self.viewer.renderer.toonRenderEdges.pop(row.get_index())
 
 class FileLoader(BoxControl):
     RECENT_LIMIT = 5
@@ -198,7 +198,7 @@ class FileLoader(BoxControl):
         # Add file chooser button
         self.fileChooser = Gtk.FileChooserButton(
             'Select model...', action=Gtk.FileChooserAction.OPEN)
-        hbox.pack_start(self.fileChooser, False, False, 0)
+        hbox.pack_start(self.fileChooser, True, True, 0)
         # Add load button
         loadButton = Gtk.Button('Load')
         hbox.pack_end(loadButton, False, False, 0)
@@ -217,7 +217,6 @@ class FileLoader(BoxControl):
 def _idle_add(func):
     def new_func():
         Gdk.threads_enter()
-        debug(func.__name__, current_thread())
         func()
         Gdk.threads_leave()
     GLib.idle_add(new_func)
@@ -247,7 +246,7 @@ class ControlPanel(Thread):
             control = controlClass(*args)
             control.show_all()
             column = self.columns[columnName]
-            column.pack_start(control, False, False, 2)
+            column.pack_start(control, True, True, 2)
 
     def run(self):
         Gdk.threads_init()
@@ -262,7 +261,9 @@ class ControlPanel(Thread):
         for name in ('misc', 'lights', 'materials'):
             frame = Gtk.Frame(label=name.capitalize())
             frame.add(self.columns[name])
-            self.box.pack_start(frame, False, True, 5)
+            column = Gtk.ScrolledWindow()
+            column.add(frame)
+            self.box.pack_start(column, True, True, 5)
         window.add(self.box)
         window.show_all()
         Gtk.main()

@@ -35,10 +35,11 @@ float multi_step(float x) {
     if(nEdges == 0) 
         return x;
     float y = 0;
-    for(int i = 0; i < nEdges; i++) {
-        y += smoothstep(edges[i] - 0.02, edges[i], x);
+    float edge;
+    for(int i = 0; i < nEdges - 1; i++) {
+        edge = edges[i];
+        y += (edges[i + 1] - edge) * smoothstep(edge - 0.02, edge, x);
     }
-    y /= nEdges;
     return y;
 }
 
@@ -52,7 +53,7 @@ void main() {
     }
     vec3 eyeVectorCamSpace = normalize(-posCamSpace);
 
-    fragColor = Ka * mtlDiffuseColor;
+    fragColor = Ka;
     for(int i = 0; i < nLights; i++) {
         vec3 lightVectorCamSpace = lightPosCamSpace[i] - posCamSpace;
 

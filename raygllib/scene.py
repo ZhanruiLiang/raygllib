@@ -1,7 +1,6 @@
 import collada
 
 from . import utils
-from .utils import debug
 from .model import Model, Material, Light
 
 def load_scene(path):
@@ -40,14 +39,11 @@ def load_scene(path):
             index = poly.index.flatten()
             index = index.reshape((len(index) // indexTupleSize, indexTupleSize))
             model = Model(
-                poly.vertex[index[:, 0]],
-                poly.normal[index[:, 1]],
-                (poly.texcoordset[0][index[:, 2]] if indexTupleSize == 3 else None),
-                material,
-                matrix,
+                poly.vertex,
+                poly.normal,
+                (poly.texcoordset[0] if indexTupleSize == 3 else None),
+                index, material, matrix,
             )
-            # debug('load model:', model)
-            # assert False
             scene.models.append(model)
         elif isinstance(node, collada.scene.LightNode):
             daeLight = node.light

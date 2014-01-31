@@ -20,16 +20,15 @@ class Renderer(Program):
             ('vertexUV', 2, GL_FLOAT),
         ])
         self.textureUnit = TextureUnit(0)
+        self.toonRenderEdges = [0.21951, 0.50244, 0.76585, 1.0]
 
-    def set_MVP(self, modelMat, viewMat, projMat):
-        glUniformMatrix4fv(self.get_uniform_loc('modelMat'), 1, GL_TRUE, modelMat)
-        glUniformMatrix4fv(self.get_uniform_loc('viewMat'), 1, GL_TRUE, viewMat)
-        glUniformMatrix4fv(self.get_uniform_loc('projMat'), 1, GL_TRUE, projMat)
+        self.toonRenderEnable = True
 
-    def set_matrix(self, name, mat):
-        glUniformMatrix4fv(self.get_uniform_loc(name), 1, GL_TRUE, mat)
-
-    def set_step_edges(self, edges):
+    def prepare_draw(self):
+        if self.toonRenderEnable:
+            edges = self.toonRenderEdges
+        else:
+            edges = []
         glUniform1i(self.get_uniform_loc('nEdges'), len(edges))
         glUniform1fv(self.get_uniform_loc('edges'), len(edges), edges)
 
@@ -70,6 +69,24 @@ class Renderer(Program):
         self.set_material(model.material)
         self.set_matrix('modelMat', model.matrix)
         self.draw(GL_TRIANGLES, len(model.vertices))
+
+class SilhouetteRenderer(Program):
+    def __init__(self):
+        super().__init__([
+            (get_shader_path('silhouette.v.glsl'), GL_VERTEX_SHADER),
+            (get_shader_path('silhouette.f.glsl'), GL_FRAGMENT_SHADER),
+            (get_shader_path('silhouette.g.glsl'), GL_GEOMETRY_SHADER),
+        ], [
+            ('vertexPos', 3, GL_FLOAT),
+        ])
+
+    def draw_model(self, model):
+        self.set_buffer('vertexPos', model.adjVertices.vertices)
+        indexBuffer = model.adjVertices.indices
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer.bufferId)
+        self.set_matrix('modelMat', model.matrix)
+        glDrawElements(GL_TRIANGLES_ADJACENCY, len(indexBuffer), GL_UNSIGNED_INT, None) 
+        # glDrawElements(GL_TRIANGLES, len(indexBuffer), GL_UNSIGNED_INT, None) 
 
 
 class ShadowRenderer(Renderer):
