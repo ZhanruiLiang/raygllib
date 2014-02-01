@@ -88,8 +88,7 @@ class Camera:
         self.tracking = False
 
     def _gen_view_mat(self):
-        self.viewMat = M.look_at(self.pos[:3], self.center[:3], self.up[:3]).dot(
-            M.scale(self._scale))
+        self.viewMat = M.look_at(self.pos[:3], self.center[:3], self.up[:3])
 
     def drag(self, dx, dy):
         axis = -dy * self.ix + dx * self.iy

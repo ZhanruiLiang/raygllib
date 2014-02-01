@@ -43,6 +43,22 @@ float multi_step(float x) {
     return y;
 }
 
+float noise1(vec2 co){
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
+float salt_and_pepper(vec3 pos) {
+    float k = noise1(pos.xy);
+    const float Pa = 0.01, Pb = 0.01;
+    if(k < Pa) {
+        return 0.5;
+    }
+    if(k < Pa + Pb) {
+        return 2;
+    }
+    return 1;
+}
+
 void main() {
     vec3 normalCamSpace1 = normalize(normalCamSpace);
     vec3 mtlDiffuseColor;

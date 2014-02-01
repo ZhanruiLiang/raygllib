@@ -11,7 +11,8 @@ from .utils import debug
 class AdjacencyVertexBuffer:
     # @profile
     def __init__(self, vertices, indices):
-        adjIndices = _halfedge.make_adj_indices(vertices, indices.astype(GLuint))
+        indices = indices.astype(GLuint)
+        adjIndices = _halfedge.make_adj_indices(indices)
         self.vertices = VertexBuffer(np.array(vertices, dtype=GLfloat), GL_STATIC_DRAW)
         self.indices = IndexBuffer(np.array(adjIndices, dtype=GLuint), GL_STATIC_DRAW)
         debug('nVertices', len(vertices), 'nAdjIndices', len(self.indices))

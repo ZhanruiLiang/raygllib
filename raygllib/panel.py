@@ -1,8 +1,8 @@
 from gi.repository import Gtk, Gdk
 from gi.repository import GLib
-from threading import Thread, RLock, current_thread
+from threading import Thread, RLock
 from .model import Light
-from .utils import debug
+# from .utils import debug
 from ._threadutils import Require
 
 class LightPosSpinButton(Gtk.SpinButton):

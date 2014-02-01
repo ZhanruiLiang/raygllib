@@ -20,24 +20,26 @@ def load_scene(path):
             # debug('load geometry:', geom.name)
             poly = geom.primitives[0]
             daeMat = mesh.materials[poly.material]
-            if hasattr(daeMat.effect.diffuse, 'sampler'):
-                diffuse = daeMat.effect.diffuse.sampler.surface.image.getImage()
-                indexTupleSize = 3
-                diffuseType = Material.DIFFUSE_TEXTURE
+            if hasattr(daeMat, '_gllibMaterail'):
+                material = daeMat._gllibMaterail
             else:
-                indexTupleSize = 2
-                diffuse = daeMat.effect.diffuse[:3]
-                diffuseType = Material.DIFFUSE_COLOR
-            material = Material(
-                daeMat.name, diffuseType, diffuse,
-                Ka=(daeMat.effect.ambient[:3]
-                    if not isinstance(daeMat.effect.ambient, collada.material.Map)
-                    else (0., 0., 0.)),
-                Ks=daeMat.effect.specular[:3],
-                shininess=daeMat.effect.shininess,
-            )
-            index = poly.index.flatten()
-            index = index.reshape((len(index) // indexTupleSize, indexTupleSize))
+                if hasattr(daeMat.effect.diffuse, 'sampler'):
+                    diffuse = daeMat.effect.diffuse.sampler.surface.image.getImage()
+                    diffuseType = Material.DIFFUSE_TEXTURE
+                else:
+                    diffuse = daeMat.effect.diffuse[:3]
+                    diffuseType = Material.DIFFUSE_COLOR
+                material = daeMat._gllibMaterail = Material(
+                    daeMat.name, diffuseType, diffuse,
+                    Ka=(daeMat.effect.ambient[:3]
+                        if not isinstance(daeMat.effect.ambient, collada.material.Map)
+                        else (0., 0., 0.)),
+                    Ks=daeMat.effect.specular[:3],
+                    shininess=daeMat.effect.shininess,
+                )
+            index = poly.index
+            indexTupleSize = 3 if material.diffuseType == Material.DIFFUSE_TEXTURE else 2
+            index = index.reshape((index.size // indexTupleSize, indexTupleSize))
             model = Model(
                 poly.vertex,
                 poly.normal,
@@ -47,7 +49,7 @@ def load_scene(path):
             scene.models.append(model)
         elif isinstance(node, collada.scene.LightNode):
             daeLight = node.light
-            light = Light(matrix[0:3, 3], daeLight.color, 500)
+            light = Light(matrix[0:3, 3], daeLight.color, 800)
             scene.lights.append(light)
     return scene
 

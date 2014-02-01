@@ -5,12 +5,13 @@ from .render import Renderer, ShadowRenderer, SilhouetteRenderer
 from .camera import Camera
 from .panel import ControlPanel
 from .scene import Scene
+from .utils import debug
 from . import matlib as M
 from ._threadutils import Require
 
 
 class Viewer:
-    FPS = 60
+    FPS = 30
 
     def __init__(self):
         self.require = Require(self)
@@ -41,10 +42,12 @@ class Viewer:
         def on_mouse_scroll(x, y, xs, ys):
             if self.camera:
                 self.camera.scale(0.05 * ys)
+                self.projMat = self.projMat0.dot(M.scale(self.camera._scale))
 
         @window.event
         def on_resize(w, h):
             self.projMat = M.ortho_view(-w / h, w / h, -1, 1, 0, 100)
+            self.projMat0 = self.projMat
 
         self.fpsDisplay = pyglet.clock.ClockDisplay()
 
@@ -82,6 +85,7 @@ class Viewer:
                 continue
             self.panel.add_material(material)
             materials.append(material)
+        debug('materials:', materials)
 
         self.scene.viewers.append(self)
 
@@ -111,17 +115,14 @@ class Viewer:
         R = self.renderer
         Rs = self.silhouetteRenderer
         with ControlPanel.lock:
-            # glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-            # with R.batch_draw():
-            #     R.set_matrix('viewMat', self.camera.viewMat)
-            #     R.set_matrix('projMat', self.projMat)
-            #     R.set_lights(self.scene.lights)
-            #     for model in self.scene.models:
-            #         R.draw_model(model)
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+            with R.batch_draw():
+                R.set_matrix('viewMat', self.camera.viewMat)
+                R.set_matrix('projMat', self.projMat)
+                R.set_lights(self.scene.lights)
+                for model in self.scene.models:
+                    R.draw_model(model)
 
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
-            glEnable(GL_POLYGON_OFFSET_LINE)
-            glPolygonOffset(1, 100)
             with Rs.batch_draw():
                 Rs.set_matrix('viewMat', self.camera.viewMat)
                 Rs.set_matrix('projMat', self.projMat)
