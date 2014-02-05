@@ -6,7 +6,7 @@ setup(
     author='Ray',
     author_email='ray040123@gmail.com',
     packages=['raygllib'],
-    ext_modules=cythonize('raygllib/_halfedge.pyx'),
+    ext_modules=cythonize('raygllib/_model.pyx'),
     package_data={
         'raygllib': ['shaders/*.glsl'],
     },

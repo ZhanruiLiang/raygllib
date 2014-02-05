@@ -23,3 +23,7 @@ doc
 /tests/test_ui.py
 /tests/tex1.png
 /tests/xx.png
+/raygllib/_halfedge.c
+/raygllib/_halfedge.html
+/raygllib/_halfedgeptr.c
+/raygllib/_halfedgeptr.pyx

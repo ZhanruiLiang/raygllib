@@ -24,7 +24,7 @@ def scale(x, y=None, z=None):
 def translate(x, y, z):
     mat = identity()
     mat[0:3, 3] = (x, y, z)
-    return 0
+    return mat
 
 def rotate(angle, center, axis):
     """

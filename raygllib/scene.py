@@ -1,7 +1,8 @@
 import collada
 
 from . import utils
-from .model import Model, Material, Light
+from . import config
+from .model import Model, Material, Light, Geometry, CompressedGeometry
 
 def load_scene(path):
     mesh = collada.Collada(path)
@@ -17,7 +18,7 @@ def load_scene(path):
             pass
         elif isinstance(node, collada.scene.GeometryNode):
             geom = node.geometry
-            # debug('load geometry:', geom.name)
+            name = geom.name
             poly = geom.primitives[0]
             daeMat = mesh.materials[poly.material]
             if hasattr(daeMat, '_gllibMaterail'):
@@ -40,16 +41,18 @@ def load_scene(path):
             index = poly.index
             indexTupleSize = 3 if material.diffuseType == Material.DIFFUSE_TEXTURE else 2
             index = index.reshape((index.size // indexTupleSize, indexTupleSize))
-            model = Model(
-                poly.vertex,
-                poly.normal,
+            # geometry = CompressedGeometry(
+            geometry = Geometry(
+                name, poly.vertex, poly.normal,
                 (poly.texcoordset[0] if indexTupleSize == 3 else None),
-                index, material, matrix,
+                index, material,
             )
+            scene._geometries.append(geometry)
+            model = Model(name, geometry, matrix)
             scene.models.append(model)
         elif isinstance(node, collada.scene.LightNode):
             daeLight = node.light
-            light = Light(matrix[0:3, 3], daeLight.color, 800)
+            light = Light(matrix[0:3, 3], daeLight.color, config.defaultLightPower)
             scene.lights.append(light)
     return scene
 
@@ -65,17 +68,24 @@ class Scene:
         self.lights = []
         self.models = []
         self.viewers = []
+        self._geometries = []
+
+    def get_model(self, name):
+        for model in self.models:
+            if model.name == name:
+                return model
+        raise KeyError(name)
 
     def add_light(self, light=None):
         if not light:
-            light = Light((10., 10., 10.), (1., 1., 1.), 500)
+            light = Light((10., 10., 10.), (1., 1., 1.), 800)
         self.lights.append(light)
         for viewer in self.viewers:
             viewer.on_add_light(light)
 
     def free(self):
-        for model in self.models:
-            model.free()
+        for geometry in self._geometries:
+            geometry.free()
         self.models = []
         self.viewers = []
         self.lights = []

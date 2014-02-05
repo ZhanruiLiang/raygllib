@@ -3,6 +3,12 @@ from OpenGL.GL import *
 # import numpy as np
 # from . import utils
 
+__all__ = [
+    'compile_shader', 'report_limits', 'AttributeNotFoundError',
+    'UniformNotFoundError', 'VertexBuffer', 'IndexBuffer', 'Program',
+    'Texture2D', 'TextureUnit', 'VertexBufferSlot'
+]
+
 
 def compile_shader(source, shaderType):
     """
@@ -19,6 +25,12 @@ def compile_shader(source, shaderType):
     if result == GL_FALSE:
         raise Exception('GLSL compile error: {}'.format(shaderType))
     return shader
+
+class AttributeNotFoundError(Exception):
+    pass
+
+class UniformNotFoundError(Exception):
+    pass
 
 class GLResource:
     def __init__(self, method, args):
@@ -193,14 +205,16 @@ class Program:
         if isinstance(name, str):
             name = name.encode('utf-8')
         loc = glGetUniformLocation(self.id, name)
-        assert loc >= 0, 'Get uniform {} failed'.format(name)
+        if loc < 0:
+            raise UniformNotFoundError(name)
         return loc
 
     def get_attrib_loc(self, name):
         if isinstance(name, str):
             name = name.encode('utf-8')
         loc = glGetAttribLocation(self.id, name)
-        assert loc >= 0, 'Get attribute {} failed'.format(name)
+        if loc < 0:
+            raise AttributeNotFoundError(name)
         return loc
 
     def print_info(self):
@@ -242,3 +256,12 @@ class TextureUnit:
     def __init__(self, id):
         self.id = id
         self.glenum = globals()['GL_TEXTURE' + str(id)]
+
+
+def report_limits():
+    names = [
+        GL_MAX_VERTEX_UNIFORM_BLOCKS, GL_MAX_GEOMETRY_UNIFORM_BLOCKS,
+        GL_MAX_FRAGMENT_UNIFORM_BLOCKS,
+    ]
+    for name in names:
+        print(repr(name), glGetIntegerv(name))

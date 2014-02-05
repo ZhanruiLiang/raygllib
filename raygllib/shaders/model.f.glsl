@@ -1,8 +1,7 @@
 # version 330 core
 
 const int MaxLightCount = 10;
-/*const vec3 lightPosModelSpace = vec3(5, 5, 10);*/
-uniform vec3 lightPosCamSpace[MaxLightCount];
+uniform vec3 lightPosModelSpace[MaxLightCount];
 uniform vec3 lightColor[MaxLightCount];
 uniform float lightPower[MaxLightCount];
 uniform int nLights;
@@ -14,8 +13,11 @@ uniform float shininess;
 uniform sampler2D textureSampler;
 uniform bool hasSampler;
 uniform mat4 viewMat, modelMat;
-uniform int nEdges = 2;
-uniform float edges[5];
+uniform int nEdges;
+uniform float edges[10];
+
+const vec3 roomCenterModelSpace = vec3(0.0, 0.0, 0);
+const float roomSize = 10;
 
 in vec2 uv;
 in vec3 normalCamSpace;
@@ -38,7 +40,7 @@ float multi_step(float x) {
     float edge;
     for(int i = 0; i < nEdges - 1; i++) {
         edge = edges[i];
-        y += (edges[i + 1] - edge) * smoothstep(edge - 0.02, edge, x);
+        y += (edges[i + 1] - edge) * smoothstep(edge - 0.01, edge, x);
     }
     return y;
 }
@@ -69,20 +71,21 @@ void main() {
     }
     vec3 eyeVectorCamSpace = normalize(-posCamSpace);
 
-    fragColor = Ka;
+    fragColor = Ka * mtlDiffuseColor;
     for(int i = 0; i < nLights; i++) {
-        vec3 lightVectorCamSpace = lightPosCamSpace[i] - posCamSpace;
-
+        vec3 lightPosCamSpace = (viewMat * vec4(lightPosModelSpace[i], 1)).xyz;
+        vec3 lightVectorCamSpace = lightPosCamSpace - posCamSpace;
         float dist = length(lightVectorCamSpace);
+        /*vec3 lightVectorCamSpace = posCamSpace - (viewMat * vec4(roomCenterModelSpace, 1)).xyz;*/
+
         lightVectorCamSpace = normalize(lightVectorCamSpace);
 
         vec3 reflectLightVectorCamSpace = reflect(lightVectorCamSpace, normalCamSpace1);
 
-        vec3 intensity = lightColor[i] / (dist * dist) * lightPower[i];
-        /*float d = clamp(dot(lightVectorCamSpace, normalCamSpace1), 0, 1);*/
-        /*float s = clamp(dot(reflectLightVectorCamSpace, eyeVectorCamSpace), 0, 1);*/
+        /*vec3 intensity = lightColor[i] / (dist * dist) * lightPower[i] * 200;*/
+        vec3 intensity = lightColor[i] * lightPower[i];
         float d = multi_step(clamp(dot(lightVectorCamSpace, normalCamSpace1), 0, 1));
-        float s = multi_step(clamp(dot(reflectLightVectorCamSpace, eyeVectorCamSpace), 0, 1));
+        float s = multi_step(clamp(dot(-reflectLightVectorCamSpace, eyeVectorCamSpace), 0, 1));
 
         fragColor += mtlDiffuseColor * intensity * d + intensity * Ks * pow(s, shininess);
     }

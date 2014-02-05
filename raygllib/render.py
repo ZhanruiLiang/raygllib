@@ -1,7 +1,8 @@
 import os
 import numpy as np
 from OpenGL.GL import *
-from .gllib import Program, TextureUnit 
+from .gllib import Program, TextureUnit, UniformNotFoundError
+from . import config
 
 curDir = os.path.split(__file__)[0]
 
@@ -20,9 +21,9 @@ class Renderer(Program):
             ('vertexUV', 2, GL_FLOAT),
         ])
         self.textureUnit = TextureUnit(0)
-        self.toonRenderEdges = [0.21951, 0.50244, 0.76585, 1.0]
+        self.toonRenderEdges = config.toonRenderEdges
 
-        self.toonRenderEnable = True
+        self.toonRenderEnable = config.toonRenderEnable
 
     def prepare_draw(self):
         if self.toonRenderEnable:
@@ -54,21 +55,25 @@ class Renderer(Program):
             np.array([light.power for light in lights], 'f'))
         glUniform3fv(self.get_uniform_loc('lightColor'), n,
             np.array([light.color for light in lights], 'f'))
-        glUniform3fv(self.get_uniform_loc('lightPosCamSpace'), n,
-            np.array([light.pos for light in lights], 'f'))
+        try:
+            glUniform3fv(self.get_uniform_loc('lightPosModelSpace'), n,
+                np.array([light.pos for light in lights], 'f'))
+        except UniformNotFoundError:
+            pass
         glUniform1i(self.get_uniform_loc('nLights'), n)
 
     def draw_model(self, model):
-        self.set_buffer('vertexPos', model.vertices)
-        self.set_buffer('vertexNormal', model.normals)
-        if model.texcoords:
+        self.set_buffer('vertexPos', model.geometry.vertices)
+        self.set_buffer('vertexNormal', model.geometry.normals)
+        if model.geometry.texcoords:
             glEnableVertexAttribArray(self._buffers['vertexUV'].location)
-            self.set_buffer('vertexUV', model.texcoords)
+            self.set_buffer('vertexUV', model.geometry.texcoords)
         else:
             glDisableVertexAttribArray(self._buffers['vertexUV'].location)
-        self.set_material(model.material)
+        self.set_material(model.geometry.material)
         self.set_matrix('modelMat', model.matrix)
-        self.draw(GL_TRIANGLES, len(model.vertices))
+        model.geometry.draw()
+
 
 class SilhouetteRenderer(Program):
     def __init__(self):
@@ -81,12 +86,29 @@ class SilhouetteRenderer(Program):
         ])
 
     def draw_model(self, model):
-        self.set_buffer('vertexPos', model.adjVertices.vertices)
-        indexBuffer = model.adjVertices.indices
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer.bufferId)
+        self.set_buffer('vertexPos', model.geometry.adjVertices.vertices)
+        model.geometry.adjVertices.bind()
         self.set_matrix('modelMat', model.matrix)
-        glDrawElements(GL_TRIANGLES_ADJACENCY, len(indexBuffer), GL_UNSIGNED_INT, None) 
-        # glDrawElements(GL_TRIANGLES, len(indexBuffer), GL_UNSIGNED_INT, None) 
+        model.geometry.adjVertices.draw()
+
+
+class WireframeRenderer(Program):
+    def __init__(self):
+        super().__init__([
+            (get_shader_path('wireframe.v.glsl'), GL_VERTEX_SHADER),
+            (get_shader_path('wireframe.f.glsl'), GL_FRAGMENT_SHADER),
+        ], [
+            ('vertexPos', 3, GL_FLOAT),
+            ('vertexNormal', 3, GL_FLOAT),
+        ])
+
+    def draw_model(self, model):
+        self.set_buffer('vertexPos', model.geometry.vertices)
+        self.set_buffer('vertexNormal', model.geometry.normals)
+        self.set_matrix('modelMat', model.matrix)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+        model.geometry.draw()
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
 
 class ShadowRenderer(Renderer):

@@ -44,8 +44,8 @@ class LightControl(PropsControl):
         props = [
             ('enable', Gtk.Switch, dict(active=light.enabled)),
             ('power', Gtk.SpinButton, dict(
-                adjustment=Gtk.Adjustment(light.power, 0, light.MAX_POWER, 50),
-                numeric=True, digits=0)),
+                adjustment=Gtk.Adjustment(light.power, 0, light.MAX_POWER, 0.2),
+                numeric=True, digits=1)),
             ('x', LightPosSpinButton, dict(value=light.pos[0])),
             ('y', LightPosSpinButton, dict(value=light.pos[1])),
             ('z', LightPosSpinButton, dict(value=light.pos[2])),
@@ -133,6 +133,8 @@ class EdgesControl(GridControl):
         save.get_buffer().set_text(str(list(sorted(edges)))) 
         self.grid.attach(save, 0, 2, 4, 2)
 
+        self.update_enable(enable)
+
     def get_selected_row(self):
         return self.edgeList.get_selected_row()
 
@@ -154,6 +156,7 @@ class EdgesControl(GridControl):
         self.edgeList.insert(row, index)
         self.edgeList.show_all()
         edges.insert(index, value)
+        edges.sort()
 
     def update_enable(self, switch, *args):
         enabled = switch.get_active()
@@ -172,6 +175,32 @@ class EdgesControl(GridControl):
         row = self.get_selected_row()
         self.edgeList.remove(row)
         self.viewer.renderer.toonRenderEdges.pop(row.get_index())
+
+
+class SilhouetteControl(GridControl):
+    def __init__(self, viewer):
+        super().__init__('Silhoette Control')
+        self.viewer = viewer
+        self.grid.attach(Gtk.Label('Enable'), 0, 0, 1, 1)
+        enable = Gtk.Switch(active=viewer.silhouetteEnable)
+        enable.connect('notify::active', self.update_enable)
+        self.grid.attach(enable, 1, 0, 1, 1) 
+
+        edgeWidth = Gtk.Scale(
+            adjustment=Gtk.Adjustment(viewer.silhouetteWidth, 0.001, 0.1),
+            digits=3, orientation=Gtk.Orientation.HORIZONTAL)
+        edgeWidth.connect('format-value', self.update_edge_width)
+        self.grid.attach(edgeWidth, 0, 1, 4, 1)
+
+    def update_enable(self, switch, *args):
+        enabled = switch.get_active()
+        with ControlPanel.lock:
+            self.viewer.silhouetteEnable = enabled
+
+    def update_edge_width(self, widget, value):
+        with ControlPanel.lock:
+            self.viewer.silhouetteWidth = widget.get_value()
+
 
 class FileLoader(BoxControl):
     RECENT_LIMIT = 5
@@ -237,6 +266,7 @@ class ControlPanel(Thread):
         self._add_control('materials', MaterialControl, material)
 
     def add_misc(self, viewer):
+        self._add_control('misc', SilhouetteControl, viewer)
         self._add_control('misc', FileLoader, viewer)
         self._add_control('misc', EdgesControl, viewer)
 

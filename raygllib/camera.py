@@ -31,9 +31,9 @@ class Variable:
         return self.value
 
     def __repr__(self):
-        return 'Variable(v0={}, v1={}, v={}, t={}, tt={}, progress={})'.format(
+        return 'Variable(v0={}, v1={}, v={}, t={}, tt={}, progress={}, finished={})'.format(
             tuple(self._startValue), tuple(self._endValue), tuple(self.value),
-            self._time, self._finishTime, self._time / self._finishTime)
+            self._time, self._finishTime, self._time / self._finishTime, self.finished)
 
 
 class BallVariable(Variable):
@@ -45,13 +45,14 @@ class BallVariable(Variable):
             z = M.normalized(np.cross(x, np.random.random(3)))
 
         angle = np.arccos(np.dot(x, y))
-        y = np.cross(z, x)
         self._ix = x
-        self._iy = y
+        self._iy = np.cross(z, x)
         self._time = 0.
         self._angle = angle
         if abs(angle) >= 1e-5:
             self.finished = False
+        else:
+            self.value = y
 
     def update(self, dt):
         if self.finished:
@@ -65,23 +66,27 @@ class BallVariable(Variable):
         self.value = np.cos(a) * self._ix + np.sin(a) * self._iy
 
     def __repr__(self):
-        return 'BallVariable(x={}, y={}, t={}, tt={}, progress={})'.format(
+        return 'BallVariable(x={}, y={}, t={}, tt={}, progress={}, finished={})'.format(
             tuple(self._ix), tuple(self._iy), self._time, self._finishTime,
-            self._time / self._finishTime)
+            self._time / self._finishTime, self.finished)
 
 
 class Camera:
     DRAG_SPEED = 0.005
+    MOVE_SPEED = 0.005
+    LEFT_BUTTON_BIT = 1
+    MIDDLE_BUTTON_BIT = 2
+    RIGHT_BUTTON_BIT = 4
 
     def __init__(self, pos, center, up):
         self.pos = M.vec3_to_vec4(pos)
         self.center = M.vec3_to_vec4(center)
-        self.iy = np.hstack([M.normalized(up), 0])
-        self.ix = np.hstack([M.normalized(np.cross(np.array(center) - pos, up)), 0])
-        self.up = M.vec3_to_vec4_n(up)
-        self._scale = 1.
+        self.up = M.vec3_to_vec4_n(M.normalized(up))
         self._gen_view_mat()
-        self.posVar = BallVariable(M.vec4_to_vec3(self.pos - self.center))
+        self.projMat0 = M.identity()
+        self._scale = 1.
+        self._gen_proj_mat()
+        self.posVar = BallVariable(M.normalized(M.vec4_to_vec3(self.pos - self.center)))
         self.centerVar = Variable(self.center)
         self.upVar = BallVariable(M.vec4_to_vec3(self.up))
         self.target = None
@@ -90,21 +95,37 @@ class Camera:
     def _gen_view_mat(self):
         self.viewMat = M.look_at(self.pos[:3], self.center[:3], self.up[:3])
 
-    def drag(self, dx, dy):
-        axis = -dy * self.ix + dx * self.iy
-        r = (dx * dx + dy * dy) ** .5
-        if r < 2:
-            return
-        R = M.rotate(-self.DRAG_SPEED * r, self.center[:3], axis[:3])
-        self.pos = R.dot(self.pos)
-        self.ix = R.dot(self.ix)
-        self.iy = R.dot(self.iy)
-        self.up = R.dot(self.up)
-        self._gen_view_mat()
-        self.tracking = False
+    def _gen_proj_mat(self):
+        self.projMat = np.dot(self.projMat0, M.scale(self._scale))
 
-    def scale(self, ds):
-        self._scale *= (1 + ds)
+    def scale(self, k):
+        self._scale *= k
+        self._gen_proj_mat()
+
+    def on_resize(self, w, h):
+        self.projMat0 = M.ortho_view(-w / h, w / h, -1, 1, -100, 100)
+        self._gen_proj_mat()
+
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        r = np.sqrt(dx * dx + dy * dy)
+        # if r < 2: return
+        iy = self.up
+        ix = M.vec3_to_vec4(M.normalized(
+            np.cross((self.center - self.pos)[:3], self.up[:3])))
+        if buttons & self.LEFT_BUTTON_BIT:
+            # Rotate
+            axis = -dy * ix + dx * iy
+            R = M.rotate(-self.DRAG_SPEED / self._scale * r, self.center[:3], axis[:3])
+            self.pos = R.dot(self.pos)
+            self.up = R.dot(self.up)
+        elif buttons & self.RIGHT_BUTTON_BIT:
+            # Move
+            T = M.translate(*(
+                (dx * ix[:3] + dy * iy[:3]) * (-self.MOVE_SPEED / self._scale)
+            ))
+            self.center = np.dot(T, self.center)
+            self.pos = np.dot(T, self.pos)
+        self.tracking = False
         self._gen_view_mat()
 
     def update(self, dt):

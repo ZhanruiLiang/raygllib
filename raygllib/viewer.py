@@ -1,13 +1,13 @@
 from OpenGL.GL import *
 import pyglet
 
-from .render import Renderer, ShadowRenderer, SilhouetteRenderer
+from .render import Renderer, ShadowRenderer, SilhouetteRenderer, WireframeRenderer
 from .camera import Camera
 from .panel import ControlPanel
 from .scene import Scene
-from .utils import debug
-from . import matlib as M
+# from .utils import debug
 from ._threadutils import Require
+from . import utils, config
 
 
 class Viewer:
@@ -23,11 +23,17 @@ class Viewer:
             width=800, height=600, resizable=True, vsync=True,
             config=pyglet.gl.Config(sample_buffers=1, samples=4))
         glEnable(GL_DEPTH_TEST)
-        glClearColor(.9, .9, .9, 1.)
 
         self.renderer = Renderer()
+
         self.silhouetteRenderer = SilhouetteRenderer()
-        self.projMat = M.identity()
+        self.silhouetteEnable = config.silhouetteEnable
+        self.silhouetteWidth = 0.01
+
+        self.wireframeRenderer = WireframeRenderer()
+        self.wireframeEnable = config.wireframeEnable
+
+        self._scale = 1.
         self.camera = Camera((0, -10, 0), (0, 0, 0), (0, 0, 1))
 
         self.panel.add_misc(self)
@@ -35,19 +41,15 @@ class Viewer:
 
         @window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
-            if self.camera:
-                self.camera.drag(dx, dy)
+            self.camera.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
 
         @window.event
         def on_mouse_scroll(x, y, xs, ys):
-            if self.camera:
-                self.camera.scale(0.05 * ys)
-                self.projMat = self.projMat0.dot(M.scale(self.camera._scale))
+            self.camera.scale(1 + 0.05 * ys)
 
         @window.event
         def on_resize(w, h):
-            self.projMat = M.ortho_view(-w / h, w / h, -1, 1, 0, 100)
-            self.projMat0 = self.projMat
+            self.camera.on_resize(w, h)
 
         self.fpsDisplay = pyglet.clock.ClockDisplay()
 
@@ -80,12 +82,11 @@ class Viewer:
 
         materials = []
         for model in self.scene.models:
-            material = model.material
+            material = model.geometry.material
             if material in materials:
                 continue
             self.panel.add_material(material)
             materials.append(material)
-        debug('materials:', materials)
 
         self.scene.viewers.append(self)
 
@@ -110,24 +111,36 @@ class Viewer:
 
     def draw(self):
         self.window.clear()
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glEnable(GL_DEPTH_TEST)
         R = self.renderer
         Rs = self.silhouetteRenderer
+        Rw = self.wireframeRenderer
         with ControlPanel.lock:
+            glClearColor(.9, .9, .9, 1.)
+            # glClearColor(0, 0, 0, 1)
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            glEnable(GL_DEPTH_TEST)
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
             with R.batch_draw():
                 R.set_matrix('viewMat', self.camera.viewMat)
-                R.set_matrix('projMat', self.projMat)
+                R.set_matrix('projMat', self.camera.projMat)
                 R.set_lights(self.scene.lights)
                 for model in self.scene.models:
                     R.draw_model(model)
 
-            with Rs.batch_draw():
-                Rs.set_matrix('viewMat', self.camera.viewMat)
-                Rs.set_matrix('projMat', self.projMat)
-                for model in self.scene.models:
-                    Rs.draw_model(model)
+            if self.silhouetteEnable:
+                with Rs.batch_draw():
+                    Rs.set_matrix('viewMat', self.camera.viewMat)
+                    Rs.set_matrix('projMat', self.camera.projMat)
+                    glUniform1f(Rs.get_uniform_loc('edgeWidth'), self.silhouetteWidth)
+                    for model in self.scene.models:
+                        Rs.draw_model(model)
+
+            if self.wireframeEnable:
+                with Rw.batch_draw():
+                    Rw.set_matrix('viewMat', self.camera.viewMat)
+                    Rw.set_matrix('projMat', self.camera.projMat)
+                    for model in self.scene.models:
+                        Rw.draw_model(model)
 
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
             glDisable(GL_DEPTH_TEST)
