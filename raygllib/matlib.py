@@ -26,6 +26,9 @@ def translate(x, y, z):
     mat[0:3, 3] = (x, y, z)
     return mat
 
+def length(v):
+    return np.sqrt(np.dot(v, v))
+
 def rotate(angle, center, axis):
     """
     angle: In radians

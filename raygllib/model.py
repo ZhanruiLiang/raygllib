@@ -7,6 +7,8 @@ import numpy as np
 
 from . import _model
 from . import utils
+from . import matlib as M
+from .utils import debug
 
 
 def get_bound_box(vs):
@@ -127,6 +129,85 @@ class Model:
         self.name = name
         self.geometry = geometry
         self.matrix = matrix
+
+    def update(self):
+        pass
+
+    def free(self):
+        pass
+
+
+class Joint:
+    def __init__(self, name, parent, invBindMatrix, matrix):
+        self.name = name
+        self.parent = parent
+        self.invBindMatrix = invBindMatrix
+        self._matrixOrigin = matrix.copy()
+        self.matrix = matrix
+        self._angle = 0.
+
+    @property
+    def angle(self):
+        return self._angle
+
+    @angle.setter
+    def angle(self, angle):
+        if np.abs(self._angle - angle) < 1e-4:
+            return
+        # m0 = self._matrixOrigin
+        # self._angle = angle
+        # R = M.rotate(angle, m0[:3, 3] / m0[3, 3], m0[:3, 0])
+        # self.matrix = R.dot(m0)
+        c = np.cos(angle)
+        s = np.sin(angle)
+        xy = (0, 1)
+        self.matrix = self._matrixOrigin.copy()
+        self.matrix[0:3, xy] =\
+            self._matrixOrigin[0:3, xy].dot(np.array([[c, -s], [s, c]]))
+        # debug(utils.format_matrix(self.matrix))
+        # debug('xLen', M.length(self.matrix[:3, 0]))
+        # debug('yLen', M.length(self.matrix[:3, 1]))
+        # debug('zLen', M.length(self.matrix[:3, 2]))
+
+    def update(self):
+        if self.parent:
+            self.globalMatrix = np.dot(self.parent.globalMatrix, self.matrix)
+        else:
+            self.globalMatrix = self.matrix
+
+class ArmaturedModel:
+    def __init__(self, name, geometry, matrix, vertexWeights, vertexJointIds, joints):
+        """
+        joints must be sorted in topology order.
+        """
+        self.name = name
+        self.geometry = geometry
+        self.matrix = matrix
+        debug('weights', vertexWeights)
+        debug('jointIds', vertexJointIds)
+        self.vertexWeights = VertexBuffer(vertexWeights)
+        self.vertexJointIds = VertexBuffer(vertexJointIds)
+        self.joints = joints
+
+    def free(self):
+        self.vertexWeights.free()
+        self.vertexJointIds.free()
+
+    def get_joint_matrices(self):
+        joints = self.joints
+        matrices = np.zeros((4 * len(joints), 4), dtype=GLfloat)
+        for i, joint in enumerate(joints):
+            joint.update()
+            matrices[i * 4:i * 4 + 4, :] = \
+                np.dot(joint.globalMatrix, joint.invBindMatrix).T
+        # debug(utils.format_matrix(matrices))
+        return matrices.flatten()
+
+    # def validate(self):
+    #     joints = self.joints
+    #     for joint in joints:
+    #         joint.update()
+    #         debug(utils.format_matrix(joint.matrix.dot(joint.invBindMatrix)))
 
     def update(self):
         pass

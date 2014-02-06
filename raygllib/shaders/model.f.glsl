@@ -1,6 +1,6 @@
 # version 330 core
 
-const int MaxLightCount = 10;
+const int MaxLightCount = 4;
 uniform vec3 lightPosModelSpace[MaxLightCount];
 uniform vec3 lightColor[MaxLightCount];
 uniform float lightPower[MaxLightCount];

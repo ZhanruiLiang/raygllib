@@ -3,6 +3,8 @@ import numpy as np
 from OpenGL.GL import *
 from .gllib import Program, TextureUnit, UniformNotFoundError
 from . import config
+from .model import ArmaturedModel
+# from .utils import debug
 
 curDir = os.path.split(__file__)[0]
 
@@ -19,6 +21,8 @@ class Renderer(Program):
             ('vertexPos', 3, GL_FLOAT),
             ('vertexNormal', 3, GL_FLOAT),
             ('vertexUV', 2, GL_FLOAT),
+            ('vertexWeights', 4, GL_FLOAT),
+            ('vertexJointIds', 4, GL_FLOAT),
         ])
         self.textureUnit = TextureUnit(0)
         self.toonRenderEdges = config.toonRenderEdges
@@ -72,7 +76,22 @@ class Renderer(Program):
             glDisableVertexAttribArray(self._buffers['vertexUV'].location)
         self.set_material(model.geometry.material)
         self.set_matrix('modelMat', model.matrix)
-        model.geometry.draw()
+        if isinstance(model, ArmaturedModel):
+            glUniform1i(self.get_uniform_loc('hasArmature'), 1)
+            self.set_buffer('vertexWeights', model.vertexWeights)
+            self.set_buffer('vertexJointIds', model.vertexJointIds)
+            glUniformMatrix4fv(self.get_uniform_loc('jointMats'),
+                len(model.joints), GL_FALSE, model.get_joint_matrices())
+            model.geometry.draw()
+        else:
+            glUniform1i(self.get_uniform_loc('hasArmature'), 0)
+            # Disable unused attributes.
+            locs = list(map(self.get_attrib_loc, ('vertexWeights', 'vertexJointIds')))
+            for loc in locs:
+                glDisableVertexAttribArray(loc)
+            model.geometry.draw()
+            for loc in locs:
+                glEnableVertexAttribArray(loc)
 
 
 class SilhouetteRenderer(Program):
@@ -109,57 +128,3 @@ class WireframeRenderer(Program):
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
         model.geometry.draw()
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-
-
-class ShadowRenderer(Renderer):
-    """
-    Usage:
-    >>>r1 = Renderer()
-    >>>r2 = ShadowRenderer()
-    >>>glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE)
-    >>>with r1.batch_draw():
-    >>>    r1.set_matrix('viewMat', viewMat)
-    >>>    r1.set_lights(lights)
-    >>>    for model in models:
-    >>>        r1.draw_model(model)
-    >>>for light in lights:
-    >>>    with r2.batch_draw():
-    >>>        r2.set_matrix('viewMat', viewMat)
-    >>>        r2.set_light(light)
-    >>>        for model in models:
-    >>>            r2.draw_model(model)
-    >>>    with r1.batch_draw():
-    >>>        r1.set_matrix('viewMat', viewMat)
-    >>>        r1.set_lights(lights)
-    >>>        for model in models:
-    >>>            r1.draw_model(model)
-    """
-    def __init__(self):
-        Program.__init__(self, [
-            (get_shader_path('shadow.v.glsl'), GL_VERTEX_SHADER),
-            (get_shader_path('shadow.g.glsl'), GL_GEOMETRY_SHADER),
-            (get_shader_path('shadow.f.glsl'), GL_FRAGMENT_SHADER),
-        ], [
-            ('vertexPos', 3, GL_FLOAT),
-        ])
-
-    def prepare_draw(self):
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE)
-        glDepthMask(GL_FALSE)
-        glStencilFunc(GL_ALWAYS, 0, 0x1)
-        glStencilOp(GL_KEEP, GL_INVERT, GL_KEEP)
-        glClear(GL_STENCIL_BUFFER_BIT)
-
-    def post_draw(self):
-        glStencilFunc(GL_EQUAL, 0, 0x1)
-        glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE)
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)
-        glDepthMask(GL_TRUE)
-
-    def set_light(self, light):
-        glUniform3f(self.get_uniform_loc('lightPosModelSpace'), *light.pos)
-
-    def draw_model(self, model):
-        self.set_buffer('vertexPos', model.vertices)
-        self.set_matrix('modelMat', model.matrix)
-        self.draw(GL_TRIANGLES, len(model.vertices))

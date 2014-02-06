@@ -1,13 +1,15 @@
 from OpenGL.GL import *
 import pyglet
 
-from .render import Renderer, ShadowRenderer, SilhouetteRenderer, WireframeRenderer
+from .render import (
+    Renderer, SilhouetteRenderer, WireframeRenderer
+)
 from .camera import Camera
 from .panel import ControlPanel
 from .scene import Scene
 # from .utils import debug
 from ._threadutils import Require
-from . import utils, config
+from . import config
 
 
 class Viewer:
@@ -72,10 +74,15 @@ class Viewer:
         self.set_scene(scene)
 
     def set_scene(self, scene):
+        clearCondition = self.panel.clearCondition
+        with clearCondition:
+            self.panel.clear()
+            if not self.panel._cleared:
+                clearCondition.wait()
         if self.scene is not None:
             self.scene.free()
         self.scene = scene
-        self.panel.reload()
+        self.scene.viewers.append(self)
 
         for light in self.scene.lights:
             self.on_add_light(light)
@@ -88,7 +95,11 @@ class Viewer:
             self.panel.add_material(material)
             materials.append(material)
 
-        self.scene.viewers.append(self)
+        joints = []
+        for model in self.scene.models:
+            if hasattr(model, 'joints'):
+                joints.extend(model.joints)
+        self.panel.add_joints(joints)
 
     def on_add_light(self, light):
         self.panel.add_light(light)
@@ -112,35 +123,38 @@ class Viewer:
     def draw(self):
         self.window.clear()
         R = self.renderer
-        Rs = self.silhouetteRenderer
-        Rw = self.wireframeRenderer
+        # Rs = self.silhouetteRenderer
+        # Rw = self.wireframeRenderer
+        models = self.scene.models
         with ControlPanel.lock:
             glClearColor(.9, .9, .9, 1.)
             # glClearColor(0, 0, 0, 1)
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
             glEnable(GL_DEPTH_TEST)
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+            # glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+
             with R.batch_draw():
                 R.set_matrix('viewMat', self.camera.viewMat)
                 R.set_matrix('projMat', self.camera.projMat)
                 R.set_lights(self.scene.lights)
-                for model in self.scene.models:
+                for model in models:
                     R.draw_model(model)
 
-            if self.silhouetteEnable:
-                with Rs.batch_draw():
-                    Rs.set_matrix('viewMat', self.camera.viewMat)
-                    Rs.set_matrix('projMat', self.camera.projMat)
-                    glUniform1f(Rs.get_uniform_loc('edgeWidth'), self.silhouetteWidth)
-                    for model in self.scene.models:
-                        Rs.draw_model(model)
+            # if self.silhouetteEnable:
+            #     with Rs.batch_draw():
+            #         Rs.set_matrix('viewMat', self.camera.viewMat)
+            #         Rs.set_matrix('projMat', self.camera.projMat)
+            #         glUniform1f(Rs.get_uniform_loc('edgeWidth'), self.silhouetteWidth)
+            #         for model in models:
+            #             Rs.draw_model(model)
 
-            if self.wireframeEnable:
-                with Rw.batch_draw():
-                    Rw.set_matrix('viewMat', self.camera.viewMat)
-                    Rw.set_matrix('projMat', self.camera.projMat)
-                    for model in self.scene.models:
-                        Rw.draw_model(model)
+            # if self.wireframeEnable:
+            #     with Rw.batch_draw():
+            #         Rw.set_matrix('viewMat', self.camera.viewMat)
+            #         Rw.set_matrix('projMat', self.camera.projMat)
+            #         for model in models:
+            #             Rw.draw_model(model)
 
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
             glDisable(GL_DEPTH_TEST)
@@ -148,50 +162,3 @@ class Viewer:
 
     def show(self):
         pyglet.app.run()
-
-
-class ShadowedViewer(Viewer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.shadowRenderer = ShadowRenderer()
-
-    def draw(self):
-        self.window.clear()
-        glClearColor(.0, .0, .0, 1.)
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glEnable(GL_DEPTH_TEST)
-        glEnable(GL_STENCIL_TEST)
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_ONE, GL_ONE)
-        glDepthFunc(GL_LEQUAL)
-
-        r1 = self.renderer
-        r2 = self.shadowRenderer
-
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE)
-        glDepthMask(GL_TRUE)
-        with r1.batch_draw():
-            r1.set_matrix('viewMat', self.camera.viewMat)
-            r1.set_matrix('projMat', self.projMat)
-            r1.set_lights(self.scene.lights)
-            for model in self.scene.models:
-                r1.draw_model(model)
-        for light in self.scene.lights:
-            with r2.batch_draw():
-                r2.set_light(light)
-                r2.set_matrix('viewMat', self.camera.viewMat)
-                r2.set_matrix('projMat', self.projMat)
-                for model in self.scene.models:
-                    r2.draw_model(model)
-            # glDisable(GL_STENCIL_TEST)
-            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)
-            glDepthMask(GL_TRUE)
-            with r1.batch_draw():
-                r1.set_matrix('viewMat', self.camera.viewMat)
-                r1.set_matrix('projMat', self.projMat)
-                r1.set_lights([light])
-                for model in self.scene.models:
-                    r1.draw_model(model)
-
-        glDisable(GL_DEPTH_TEST)
-        self.fpsDisplay.draw()

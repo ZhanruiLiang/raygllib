@@ -79,3 +79,7 @@ def debug(*args, **kwargs):
     # kwargs['file'] = _debugLogFile
     # p()
     _count += 1
+
+def format_matrix(mat):
+    return '{}\n{}'.format(
+        '-' * 20, '\n'.join(' '.join('{:5.2f}'.format(x) for x in y) for y in mat))

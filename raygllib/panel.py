@@ -1,9 +1,11 @@
 from gi.repository import Gtk, Gdk
+Gdk.threads_init()
 from gi.repository import GLib
-from threading import Thread, RLock
+from threading import Thread, RLock, Condition
 from .model import Light
 # from .utils import debug
 from ._threadutils import Require
+import math
 
 class LightPosSpinButton(Gtk.SpinButton):
     def __init__(self, value):
@@ -177,6 +179,23 @@ class EdgesControl(GridControl):
         self.viewer.renderer.toonRenderEdges.pop(row.get_index())
 
 
+class JointControl(BoxControl):
+    def __init__(self, joints):
+        super().__init__('Joints Control')
+        for joint in joints:
+            scale = Gtk.Scale(adjustment=Gtk.Adjustment(0, -180, 180, 0),
+                digits=0, orientation=Gtk.Orientation.HORIZONTAL)
+            scale.connect('format-value', self.update_angle, joint)
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            row.pack_start(Gtk.Label(joint.name), False, False, 2)
+            row.pack_end(scale, True, True, 0)
+            self.box.pack_start(row, False, False, 0)
+
+    def update_angle(self, scale, value, joint):
+        with ControlPanel.lock:
+            joint.angle = scale.get_value() / 180 * math.pi
+
+
 class SilhouetteControl(GridControl):
     def __init__(self, viewer):
         super().__init__('Silhoette Control')
@@ -243,11 +262,9 @@ class FileLoader(BoxControl):
             self.viewer.require.load_scene(filename)
 
 
-def _idle_add(func):
+def glib_idle_add(func):
     def new_func():
-        Gdk.threads_enter()
         func()
-        Gdk.threads_leave()
     GLib.idle_add(new_func)
 
 
@@ -270,8 +287,11 @@ class ControlPanel(Thread):
         self._add_control('misc', FileLoader, viewer)
         self._add_control('misc', EdgesControl, viewer)
 
+    def add_joints(self, joints):
+        self._add_control('joints', JointControl, joints)
+
     def _add_control(self, columnName, controlClass, *args):
-        @_idle_add
+        @glib_idle_add
         def add_control():
             control = controlClass(*args)
             control.show_all()
@@ -285,10 +305,11 @@ class ControlPanel(Thread):
         self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.columns = {
             'misc': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
+            'joints': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
             'lights': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
             'materials': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
         }
-        for name in ('misc', 'lights', 'materials'):
+        for name in ('misc', 'joints', 'lights', 'materials'):
             frame = Gtk.Frame(label=name.capitalize())
             frame.add(self.columns[name])
             column = Gtk.ScrolledWindow()
@@ -299,12 +320,19 @@ class ControlPanel(Thread):
         Gtk.main()
         Gdk.threads_quit()
 
-    def reload(self):
-        @_idle_add
-        def reload():
+    clearCondition = Condition(RLock())
+
+    def clear(self):
+        self._cleared = False
+        @glib_idle_add
+        def clear():
+            self.clearCondition.acquire()
             # clear lights column
             for child in self.columns['lights'].get_children():
                 child.destroy()
             # clear materials column
             for child in self.columns['materials'].get_children():
                 child.destroy()
+            self.clearCondition.notify_all()
+            self.clearCondition.release()
+            self._cleared = True

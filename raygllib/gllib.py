@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from OpenGL.GL import *
+from .utils import debug
 # import numpy as np
 # from . import utils
 
@@ -45,7 +46,8 @@ class GLResource:
         self.method = None
 
     def __del__(self):
-        assert self.method is None
+        if self.method is not None:
+            debug(self, 'has not been freed')
 
 class Texture2D(GLResource):
     MAG_FILTER = GL_LINEAR
@@ -135,6 +137,7 @@ class Program:
     def __init__(self, shader_datas, bufs):
         """
         shader_datas: A list of (filename, shaderType) tuples.
+        bufs: A list of (attributeName, size, typeEnum) tuples.
         """
         self.id = glCreateProgram()
         shaders = []
@@ -261,7 +264,7 @@ class TextureUnit:
 def report_limits():
     names = [
         GL_MAX_VERTEX_UNIFORM_BLOCKS, GL_MAX_GEOMETRY_UNIFORM_BLOCKS,
-        GL_MAX_FRAGMENT_UNIFORM_BLOCKS,
+        GL_MAX_FRAGMENT_UNIFORM_BLOCKS, GL_MAX_TEXTURE_UNITS,
     ]
     for name in names:
         print(repr(name), glGetIntegerv(name))
