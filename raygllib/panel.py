@@ -2,16 +2,32 @@ from gi.repository import Gtk, Gdk
 Gdk.threads_init()
 from gi.repository import GLib
 from threading import Thread, RLock, Condition
-from .model import Light
 # from .utils import debug
 from ._threadutils import Require
 import math
+import pickle
 
-class LightPosSpinButton(Gtk.SpinButton):
-    def __init__(self, value):
-        R = Light.MAX_RANGE
-        super().__init__(
-            adjustment=Gtk.Adjustment(value, -R, R, .05), numeric=True, digits=3)
+VERTICAL = Gtk.Orientation.VERTICAL
+HORIZONTAL = Gtk.Orientation.HORIZONTAL
+
+class VectorSpin(Gtk.Box):
+    def __init__(self, var, valRange, normalize=False, orientation=VERTICAL):
+        super().__init__(orientation=orientation)
+        self.var = var
+        self.normalize = normalize
+        for i in range(min(3, len(var))):
+            spin = Gtk.SpinButton(
+                adjustment=Gtk.Adjustment(var[i], -valRange, valRange, 0.05),
+                numeric=True, digits=3)
+            self.pack_start(spin, True, True, 0)
+            spin.connect('value-changed', self.update_var, i)
+
+    def update_var(self, spin, i):
+        with ControlPanel.lock:
+            self.var[i] = spin.get_value()
+            if self.normalize:
+                self.var /= self.var.dot(self.var) ** .5
+
 
 class GridControl(Gtk.Frame):
     def __init__(self, label):
@@ -21,9 +37,9 @@ class GridControl(Gtk.Frame):
 
 
 class BoxControl(Gtk.Frame):
-    def __init__(self, label):
+    def __init__(self, label, orientation=VERTICAL):
         super().__init__(label=label, border_width=2)
-        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.box = Gtk.Box(orientation=orientation)
         self.add(self.box)
 
 
@@ -48,23 +64,13 @@ class LightControl(PropsControl):
             ('power', Gtk.SpinButton, dict(
                 adjustment=Gtk.Adjustment(light.power, 0, light.MAX_POWER, 0.2),
                 numeric=True, digits=1)),
-            ('x', LightPosSpinButton, dict(value=light.pos[0])),
-            ('y', LightPosSpinButton, dict(value=light.pos[1])),
-            ('z', LightPosSpinButton, dict(value=light.pos[2])),
+            ('pos', VectorSpin,
+                dict(var=light.pos, valRange=light.MAX_RANGE, normalize=False)),
         ]
         super().__init__('', props)
         widgets = self.widgets
-        widgets['x'].connect('value-changed', self.update_pos, 0)
-        widgets['y'].connect('value-changed', self.update_pos, 1)
-        widgets['z'].connect('value-changed', self.update_pos, 2)
         widgets['enable'].connect('notify::active', self.update_enable)
         widgets['power'].connect('value-changed', self.update_power)
-
-    def update_pos(self, spin, axis):
-        pos = list(self.light.pos)
-        pos[axis] = float(spin.get_value())
-        with ControlPanel.lock:
-            self.light.pos = tuple(pos)
 
     def update_enable(self, button, *args):
         with ControlPanel.lock:
@@ -153,7 +159,7 @@ class EdgesControl(GridControl):
             except IndexError:
                 value = 0.
         row = Gtk.Scale(adjustment=Gtk.Adjustment(value, 0, 1, 0), digits=5,
-            orientation=Gtk.Orientation.HORIZONTAL)
+            orientation=HORIZONTAL)
         row.connect('format-value', lambda s, value: self.update_value(index, value))
         self.edgeList.insert(row, index)
         self.edgeList.show_all()
@@ -182,11 +188,11 @@ class EdgesControl(GridControl):
 class JointControl(BoxControl):
     def __init__(self, joints):
         super().__init__('Joints Control')
-        for joint in joints:
+        for joint in sorted(joints, key=lambda joint: joint.name):
             scale = Gtk.Scale(adjustment=Gtk.Adjustment(0, -180, 180, 0),
-                digits=0, orientation=Gtk.Orientation.HORIZONTAL)
+                digits=0, orientation=HORIZONTAL)
             scale.connect('format-value', self.update_angle, joint)
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            row = Gtk.Box(orientation=HORIZONTAL)
             row.pack_start(Gtk.Label(joint.name), False, False, 2)
             row.pack_end(scale, True, True, 0)
             self.box.pack_start(row, False, False, 0)
@@ -195,6 +201,51 @@ class JointControl(BoxControl):
         with ControlPanel.lock:
             joint.angle = scale.get_value() / 180 * math.pi
 
+
+class State:
+    PATH = '/tmp/raygllib_state'
+    vars = {}
+
+    @staticmethod
+    def save():
+        pickle.dump(State.vars, open(State.PATH, 'wb'), -1)
+
+    @staticmethod
+    def load():
+        State.vars = pickle.load(open(State.PATH, 'rb'))
+
+
+class CameraControl(BoxControl):
+    def __init__(self, viewer):
+        super().__init__('Camera Control', HORIZONTAL)
+        saveButton = Gtk.Button('Save')
+        loadButton = Gtk.Button('Load')
+        self.viewer = viewer
+        self.box.pack_start(saveButton, False, False, 0)
+        self.box.pack_start(loadButton, False, False, 0)
+
+        saveButton.connect('clicked', self.save)
+        loadButton.connect('clicked', self.load)
+
+    def load(self, *args):
+        State.load()
+        cam = self.viewer.camera
+        with ControlPanel.lock:
+            cam.up[:] = State.vars['up']
+            cam.pos[:] = State.vars['pos']
+            cam.center[:] = State.vars['center']
+            cam._scale = State.vars['scale']
+            cam._gen_view_mat()
+            cam._gen_proj_mat()
+
+    def save(self, *args):
+        cam = self.viewer.camera
+        with ControlPanel.lock:
+            State.vars['up'] = cam.up
+            State.vars['pos'] = cam.pos
+            State.vars['center'] = cam.center
+            State.vars['scale'] = cam._scale
+        State.save()
 
 class SilhouetteControl(GridControl):
     def __init__(self, viewer):
@@ -207,7 +258,7 @@ class SilhouetteControl(GridControl):
 
         edgeWidth = Gtk.Scale(
             adjustment=Gtk.Adjustment(viewer.silhouetteWidth, 0.001, 0.1),
-            digits=3, orientation=Gtk.Orientation.HORIZONTAL)
+            digits=3, orientation=HORIZONTAL)
         edgeWidth.connect('format-value', self.update_edge_width)
         self.grid.attach(edgeWidth, 0, 1, 4, 1)
 
@@ -283,8 +334,9 @@ class ControlPanel(Thread):
         self._add_control('materials', MaterialControl, material)
 
     def add_misc(self, viewer):
-        self._add_control('misc', SilhouetteControl, viewer)
+        self._add_control('misc', CameraControl, viewer)
         self._add_control('misc', FileLoader, viewer)
+        self._add_control('misc', SilhouetteControl, viewer)
         self._add_control('misc', EdgesControl, viewer)
 
     def add_joints(self, joints):
@@ -302,12 +354,12 @@ class ControlPanel(Thread):
         Gdk.threads_init()
         self.window = window = Gtk.Window(title='Control Panel')
         window.connect("delete-event", Gtk.main_quit)
-        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.box = Gtk.Box(orientation=HORIZONTAL)
         self.columns = {
-            'misc': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
-            'joints': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
-            'lights': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
-            'materials': Gtk.Box(orientation=Gtk.Orientation.VERTICAL),
+            'misc': Gtk.Box(orientation=VERTICAL),
+            'joints': Gtk.Box(orientation=VERTICAL),
+            'lights': Gtk.Box(orientation=VERTICAL),
+            'materials': Gtk.Box(orientation=VERTICAL),
         }
         for name in ('misc', 'joints', 'lights', 'materials'):
             frame = Gtk.Frame(label=name.capitalize())
@@ -324,6 +376,7 @@ class ControlPanel(Thread):
 
     def clear(self):
         self._cleared = False
+
         @glib_idle_add
         def clear():
             self.clearCondition.acquire()

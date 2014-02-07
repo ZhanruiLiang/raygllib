@@ -6,10 +6,9 @@ from . import config
 from .model import ArmaturedModel
 # from .utils import debug
 
-curDir = os.path.split(__file__)[0]
 
 def get_shader_path(name):
-    return os.path.join(curDir, 'shaders', name)
+    return os.path.join(os.path.dirname(__file__), 'shaders', name)
 
 
 class Renderer(Program):
@@ -40,7 +39,7 @@ class Renderer(Program):
     def set_material(self, material):
         if material.diffuseType == material.DIFFUSE_TEXTURE:
             glActiveTexture(self.textureUnit.glenum)
-            glBindTexture(GL_TEXTURE_2D, material.diffuse.textureId)
+            glBindTexture(GL_TEXTURE_2D, material.diffuse.glId)
             glUniform1i(self.get_uniform_loc('hasSampler'), 1)
             glUniform1i(self.get_uniform_loc('textureSampler'), self.textureUnit.id)
         else:

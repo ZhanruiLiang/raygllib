@@ -34,37 +34,58 @@ class UniformNotFoundError(Exception):
     pass
 
 class GLResource:
-    def __init__(self, method, args):
-        self.method = method
-        self.args = args
+    def __init__(self):
+        self._id = None
+
+    @property
+    def glId(self):
+        if self._id is None:
+            self._id = self.allocate()
+        return self._id
+
+    def allocate(self):
+        "Allocate GL resource and return a id. "
+        raise NotImplementedError()
+
+    def dealloc(self):
+        raise NotImplementedError()
 
     def free(self):
-        if self.method is None:
+        if self._id is None:
             return
         # utils.debug('delete resource', self, trace=True)
-        self.method(*self.args)
-        self.method = None
+        self.dealloc()
+        self._id = True
 
     def __del__(self):
-        if self.method is not None:
+        if self._id is not None:
             debug(self, 'has not been freed')
+
 
 class Texture2D(GLResource):
     MAG_FILTER = GL_LINEAR
     MIN_FILTER = GL_LINEAR_MIPMAP_LINEAR
 
     def __init__(self, image):
-        self.textureId = self.make_texture(image)
-        GLResource.__init__(self, glDeleteTextures, ([self.textureId],))
+        GLResource.__init__(self)
+        self.image = image
 
-        glBindTexture(GL_TEXTURE_2D, self.textureId)
+    def allocate(self):
+        textureId = self.make_texture(self.image)
+        del self.image
+        glBindTexture(GL_TEXTURE_2D, textureId)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, self.MAG_FILTER)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, self.MIN_FILTER)
         glGenerateMipmap(GL_TEXTURE_2D)
+        return textureId
 
-    def make_texture(self, image):
+    def dealloc(self):
+        glDeleteTextures([self.glId])
+
+    @staticmethod
+    def make_texture(image):
         data = image.convert('RGBA').tobytes()
         width, height = image.size
         glEnable(GL_TEXTURE_2D)
@@ -84,7 +105,6 @@ class Texture2D(GLResource):
 
 
 class VertexBuffer(GLResource):
-    bufferId = None
     target = GL_ARRAY_BUFFER
 
     def __init__(self, data, usage_hint=GL_STATIC_DRAW):
@@ -93,25 +113,20 @@ class VertexBuffer(GLResource):
         :param GLenum usage_hint: The last parameter of glBufferData
         """
         self.usageHint = usage_hint
-        self._set_data(data)
-        GLResource.__init__(self, glDeleteBuffers, (1, [self.bufferId]))
-
-    def _set_data(self, data):
-        assert self.bufferId is None
         self._length = len(data)
-        self.bufferId = glGenBuffers(1)
-        glBindBuffer(self.target, self.bufferId)
+        self.data = data
+        GLResource.__init__(self)
+
+    def allocate(self):
+        id = glGenBuffers(1)
+        data = self.data
+        del self.data
+        glBindBuffer(self.target, id)
         glBufferData(self.target, data, self.usageHint)
+        return id
 
-    # def __getstate__(self):
-    #     state = self.__dict__.copy()
-    #     state['usageHint'] = repr(self.usageHint)
-    #     return state
-
-    # def __setstate__(self, state_dict):
-    #     self.__dict__ = state_dict
-    #     self.usageHint = globals()[self.usageHint]
-    #     self._set_data(self.data)
+    def dealloc(self):
+        glDeleteBuffers(1, [self.glId])
 
     def __len__(self):
         return self._length
@@ -128,51 +143,61 @@ class VertexBufferSlot:
         self.dataType = data_type
 
     def set_buffer(self, buffer):
-        glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferId)
+        glBindBuffer(GL_ARRAY_BUFFER, buffer.glId)
         glVertexAttribPointer(
             self.location, self.itemSize, self.dataType, GL_FALSE, 0, None)
 
 
-class Program:
-    def __init__(self, shader_datas, bufs):
+class Program(GLResource):
+    def __init__(self, shaderDatas, bufs):
         """
-        shader_datas: A list of (filename, shaderType) tuples.
+        shaderDatas: A list of (filename, shaderType) tuples.
         bufs: A list of (attributeName, size, typeEnum) tuples.
         """
-        self.id = glCreateProgram()
+        GLResource.__init__(self)
+        self._alocs = {}  # Attribute locations buffer
+        self._ulocs = {}  # Uniform locations buffer
+        self.bufs = bufs
+        self.shaderDatas = shaderDatas
+
+    def allocate(self):
+        self.id = id = glCreateProgram()
         shaders = []
         try:
-            for name, type in shader_datas:
-                source = open(name, 'r').read()
+            for name, type in self.shaderDatas:
+                with open(name, 'r') as infile:
+                    source = infile.read()
                 shader = compile_shader(source, type)
-                glAttachShader(self.id, shader)
+                glAttachShader(id, shader)
                 shaders.append(shader)
-            glLinkProgram(self.id)
+            glLinkProgram(id)
         finally:
             for shader in shaders:
                 glDeleteShader(shader)
+
         assert self.check_linked()
         assert self.check_valid()
-        self._init_buffers(bufs)
 
-    def __del__(self):
-        try:
-            glDeleteVertexArrays(1, [self.vao])
-        except TypeError:
-            # OpenGL is destroyed.
-            pass
-
-    def _init_buffers(self, bufs):
-        """
-        bufs: [(name, size, type)]
-        """
+        # Make VAO
         self._buffers = {}
         self.vao = glGenVertexArrays(1)
         glBindVertexArray(self.vao)
 
-        for name, size, type in bufs:
-            loc = self.get_attrib_loc(name)
+        # Make buffer slots
+        for name, size, type in self.bufs:
+            loc = glGetAttribLocation(id, name.encode('ascii'))
+            if loc < 0:
+                raise AttributeNotFoundError(name)
             self._buffers[name] = VertexBufferSlot(loc, size, type)
+
+        glUseProgram(0)
+        del self.bufs, self.shaderDatas
+        return self.id
+
+    def dealloc(self):
+        glDeleteVertexArrays(1, [self.vao])
+        glDeleteProgram(self.glId)
+        del self.id
 
     def set_buffer(self, name, data):
         self._buffers[name].set_buffer(data)
@@ -180,6 +205,7 @@ class Program:
     @contextmanager
     def batch_draw(self):
         self.use()
+        glBindVertexArray(self.vao)
         self.enable_attribs()
         self.prepare_draw()
         yield
@@ -205,19 +231,23 @@ class Program:
         glDrawArrays(primitive_type, 0, count)
 
     def get_uniform_loc(self, name):
-        if isinstance(name, str):
-            name = name.encode('utf-8')
-        loc = glGetUniformLocation(self.id, name)
-        if loc < 0:
-            raise UniformNotFoundError(name)
+        if name not in self._ulocs:
+            loc = glGetUniformLocation(self.glId, name.encode('ascii'))
+            if loc < 0:
+                raise UniformNotFoundError(name)
+            self._ulocs[name] = loc
+        else:
+            loc = self._ulocs[name]
         return loc
 
     def get_attrib_loc(self, name):
-        if isinstance(name, str):
-            name = name.encode('utf-8')
-        loc = glGetAttribLocation(self.id, name)
-        if loc < 0:
-            raise AttributeNotFoundError(name)
+        if name not in self._alocs:
+            loc = glGetAttribLocation(self.glId, name.encode('ascii'))
+            if loc < 0:
+                raise AttributeNotFoundError(name)
+            self._alocs[name] = loc
+        else:
+            loc = self._alocs[name]
         return loc
 
     def print_info(self):
@@ -241,15 +271,10 @@ class Program:
         return True
 
     def use(self):
-        glUseProgram(self.id)
+        glUseProgram(self.glId)
 
     def unuse(self):
         glUseProgram(0)
-
-    def delete(self):
-        if self.id is not None:
-            glDeleteProgram(self.id)
-            self.id = None
 
     def set_matrix(self, name, mat):
         glUniformMatrix4fv(self.get_uniform_loc(name), 1, GL_TRUE, mat)

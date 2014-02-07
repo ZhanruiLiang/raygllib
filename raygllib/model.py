@@ -10,6 +10,9 @@ from . import utils
 from . import matlib as M
 from .utils import debug
 
+def vector(v):
+    return np.array(v, dtype=np.float32)
+
 
 def get_bound_box(vs):
     """
@@ -32,7 +35,7 @@ class AdjacencyVertexBuffer:
         utils.debug('nVertices', len(vertices), 'nAdjIndices', len(self.indices))
 
     def bind(self):
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.indices.bufferId)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.indices.glId)
 
     def draw(self):
         glDrawElements(GL_TRIANGLES_ADJACENCY, len(self.indices), GL_UNSIGNED_INT, None) 
@@ -120,7 +123,7 @@ class CompressedGeometry(Geometry):
         self.indices.free()
 
     def draw(self):
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.indices.bufferId)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.indices.glId)
         glDrawElements(GL_TRIANGLES, len(self.indices), GL_UNSIGNED_INT, None)
 
 
@@ -164,10 +167,6 @@ class Joint:
         self.matrix = self._matrixOrigin.copy()
         self.matrix[0:3, xy] =\
             self._matrixOrigin[0:3, xy].dot(np.array([[c, -s], [s, c]]))
-        # debug(utils.format_matrix(self.matrix))
-        # debug('xLen', M.length(self.matrix[:3, 0]))
-        # debug('yLen', M.length(self.matrix[:3, 1]))
-        # debug('zLen', M.length(self.matrix[:3, 2]))
 
     def update(self):
         if self.parent:
@@ -183,8 +182,6 @@ class ArmaturedModel:
         self.name = name
         self.geometry = geometry
         self.matrix = matrix
-        debug('weights', vertexWeights)
-        debug('jointIds', vertexJointIds)
         self.vertexWeights = VertexBuffer(vertexWeights)
         self.vertexJointIds = VertexBuffer(vertexJointIds)
         self.joints = joints
@@ -240,7 +237,7 @@ class Light:
     MAX_RANGE = 100
 
     def __init__(self, pos, color, power):
-        self.pos = pos
+        self.pos = vector(pos)
         self.color = color
         self.power = power
         self.enabled = True
