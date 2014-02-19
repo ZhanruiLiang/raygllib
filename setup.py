@@ -5,9 +5,10 @@ setup(
     description='OpenGL utils',
     author='Ray',
     author_email='ray040123@gmail.com',
-    packages=['raygllib'],
-    ext_modules=cythonize('raygllib/_model.pyx'),
+    packages=['raygllib', 'raygllib.ui'],
+    ext_modules=cythonize(['raygllib/_model.pyx', 'raygllib/ui/_render.pyx']),
     package_data={
-        'raygllib': ['shaders/*.glsl'],
+        'raygllib': ['shaders/*.glsl', 'models/*'],
+        'raygllib.ui': ['shaders/*.glsl', 'textures/*']
     },
 )

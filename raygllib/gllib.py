@@ -11,6 +11,11 @@ __all__ = [
 ]
 
 
+class ShaderCompileError(Exception):
+    def __init__(self, shaderType, info):
+        super().__init__('{}:\n{}'.format(shaderType, info))
+
+
 def compile_shader(source, shaderType):
     """
     source: str source code
@@ -20,11 +25,9 @@ def compile_shader(source, shaderType):
     glShaderSource(shader, source)
     glCompileShader(shader)
     result = glGetShaderiv(shader, GL_COMPILE_STATUS)
-    info = glGetShaderInfoLog(shader).decode('utf-8')
-    if info:
-        print('Shader compilation info:\n{}'.format(info))
     if result == GL_FALSE:
-        raise Exception('GLSL compile error: {}'.format(shaderType))
+        info = glGetShaderInfoLog(shader).decode('utf-8')
+        raise ShaderCompileError(shaderType, info)
     return shader
 
 class AttributeNotFoundError(Exception):
@@ -55,7 +58,7 @@ class GLResource:
             return
         # utils.debug('delete resource', self, trace=True)
         self.dealloc()
-        self._id = True
+        self._id = None
 
     def __del__(self):
         if self._id is not None:
@@ -93,7 +96,8 @@ class Texture2D(GLResource):
         glBindTexture(GL_TEXTURE_2D, textureId)
         assert textureId > 0, 'Fail to get new texture id.'
         glTexImage2D(
-            GL_TEXTURE_2D, 0,
+            GL_TEXTURE_2D,
+            0,  # level
             GL_RGBA,  # internal format
             width, height,
             0,  # border, must be 0
@@ -102,6 +106,23 @@ class Texture2D(GLResource):
             data,
         )
         return textureId
+
+
+class DynamicVertexBuffer(GLResource):
+    def __init__(self, usageHint=GL_DYNAMIC_DRAW):
+        super().__init__()
+        self.usageHint = usageHint
+
+    def allocate(self):
+        id = glGenBuffers(1)
+        return id
+
+    def dealloc(self):
+        glDeleteBuffers(1, [self.glId])
+
+    def set_data(self, data):
+        glBindBuffer(GL_ARRAY_BUFFER, self.glId)
+        glBufferData(GL_ARRAY_BUFFER, data, self.usageHint)
 
 
 class VertexBuffer(GLResource):

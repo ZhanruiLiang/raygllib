@@ -1,4 +1,5 @@
 import time
+import os
 from OpenGL.GL import *
 import sys
 import functools
@@ -83,3 +84,7 @@ def debug(*args, **kwargs):
 def format_matrix(mat):
     return '{}\n{}'.format(
         '-' * 20, '\n'.join(' '.join('{:5.2f}'.format(x) for x in y) for y in mat))
+
+def file_relative_path(file, *subPaths):
+    return os.path.join(os.path.dirname(file), *subPaths)
+
