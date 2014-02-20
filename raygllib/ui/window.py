@@ -2,7 +2,7 @@ import numpy as np
 import pyglet
 
 import raygllib.gllib as gl
-from .base import Widget, Canvas, LayoutDirection, Color
+from .base import Widget, Canvas, LayoutDirection, Color, RectShape, join_props
 from .event import EVENT_HANDLED, EVENT_UNHANDLED
 from .render import RectRender, FontRender
 
@@ -31,6 +31,46 @@ def collect_canvases(widget):
     for child in widget.children:
         yield from collect_canvases(child)
 
+
+class FocusRect(RectShape):
+    properties = join_props(RectShape.properties, [
+        ('color', Color(.5, .5, .4, 1.)),
+    ])
+    BLINK_INTERVAL = 1.2
+    MIN_ALPHA = 0.2
+    MAX_ALPHA = 0.4
+    _time = 0
+    _target = None
+
+    def update(self, dt):
+        if self.target:
+            T = self.BLINK_INTERVAL
+            t = self._time
+            if t < T / 2:
+                k = t * 2 / T
+            else:
+                k = 2 - t * 2 / T
+            self.color[3] = self.MIN_ALPHA * (1 - k) + self.MAX_ALPHA * k
+            self._time = (t + dt) % T
+        else:
+            self.color[3] = 0.
+
+    @property
+    def target(self):
+        return self._target
+
+    @target.setter
+    def target(self, target):
+        self._target = target
+        if target:
+            target.teach_properties(self, ('x', 'y', 'width', 'height'))
+        self._time = 0
+
+    def on_relayout(self):
+        if self.target:
+            self.target.teach_properties(self, ('x', 'y', 'width', 'height'))
+
+
 class Window(pyglet.window.Window):
     def __init__(self,
             vsync=True, config=pyglet.gl.Config(sample_buffers=1, samples=4), **kwargs):
@@ -48,7 +88,9 @@ class Window(pyglet.window.Window):
 
         self._shortcuts = {}
         self._shortcutId = 0
+
         self.focus = None
+        self._focusRect = FocusRect()
 
     def _locate_widget_at(self, x, y):
         for widget in reversed(self._widgets):
@@ -94,8 +136,10 @@ class Window(pyglet.window.Window):
         self.relayout()
         self._fontRender.set_screen_size(w, h)
         self._rectRender.set_screen_size(w, h)
+        self._focusRect.on_relayout()
 
     def on_key_press(self, symbol, modifiers):
+        # print(symbol, modifiers)
         for kc in self._shortcuts:
             if kc.key == symbol and (kc.mask & modifiers) == kc.mask:
                 for func in reversed(self._shortcuts[kc]):
@@ -109,6 +153,10 @@ class Window(pyglet.window.Window):
         self._handle_mouse_event('on_mouse_drag', x, y, dx, dy, buttons, modifiers)
 
     def on_mouse_motion(self, x, y, dx, dy):
+        for widget in self._locate_widget_at(x, self.height - y):
+            if widget.focusable:
+                self.set_focus(widget)
+                break
         self._handle_mouse_event('on_mouse_motion', x, y, dx, dy)
 
     def on_mouse_press(self, x, y, button, modifiers):
@@ -203,11 +251,30 @@ class Window(pyglet.window.Window):
 
         self._widgets = widgets
         self._collect()
+        self._make_focus_chain()
+
+    def update(self, dt):
+        self._focusRect.update(dt)
 
     def _collect(self):
         self._textboxes = list(collect_textboxes(self.root))
         self._rects = list(collect_rects(self.root))
         self._canvases = list(collect_canvases(self.root))
+        self._rects.append(self._focusRect)
+
+    def _make_focus_chain(self):
+        widgets = [widget for widget in self._widgets if widget.focusable]
+        for i in range(len(widgets)):
+            widgets[i]._prevFocus = widgets[i - 1]
+            widgets[i - 1]._nextFocus = widgets[i]
+            widgets[i].set_focus = self.set_focus
+        if widgets and self.focus is None:
+            self.set_focus(widgets[0])
+
+    def set_focus(self, widget):
+        if widget != self.focus:
+            self.focus = widget
+            self._focusRect.target = widget
 
     def on_draw(self):
         gl.glClearColor(*self.color)

@@ -53,6 +53,7 @@ class RectRender(Render):
 
     # @profile
     def draw_rects(self, rects):
+        # rects = [rect for rect in rects if rect.visible]
         nRects = len(rects)
         psBuffer = np.zeros((nRects, 4), dtype=gl.GLfloat)
         colorBuffer = np.zeros((nRects, 4), dtype=gl.GLfloat)

@@ -1,6 +1,7 @@
 from .base import (
     Widget, join_props, REQUIRED, TextBox, RectShape, Color, TextAlign, LayoutDirection,
 )
+from . import key as K
 
 colorDark = Color(.5, .5, .5, 1.)
 colorLight = Color(.8, .8, .8, 1.)
@@ -14,6 +15,7 @@ class Panel(Widget):
     properties = join_props(Widget.properties, [
         ('color', colorDark),
         ('solid', True),
+        ('focusable', False),
     ])
 
     def __init__(self, *args, **kwargs):
@@ -37,6 +39,7 @@ class Panel(Widget):
 class Label(Widget):
     properties = join_props(Widget.properties, [
         ('textbox', REQUIRED),
+        ('focusable', False),
     ])
 
     def __init__(self, *args, **kwargs):
@@ -56,6 +59,7 @@ class Button(Widget):
         ('text', REQUIRED),
         ('height', 16),
         ('fontSize', defaultFontSize),
+        ('focusable', True),
     ])
 
     signals = ['click']
@@ -79,6 +83,14 @@ class Button(Widget):
 
     def on_mouse_release(self, x, y, button, modifiers):
         self.emit_signal('click')
+        return True
+
+    def on_key_press(self, symbol, modifiers):
+        if super().on_key_press(symbol, modifiers):
+            return True
+        if symbol in (K.ENTER, K.SPACE):
+            self.emit_signal('click')
+            return True
 
 
 class Switch(Panel):
@@ -90,6 +102,7 @@ class Switch(Panel):
         ('color', colorLight),
         ('fontColor', colorFontDark),
         ('layoutDirection', LayoutDirection.HORIZONTAL),
+        ('focusable', True),
     ])
 
     signals = ['toggled']
@@ -106,9 +119,20 @@ class Switch(Panel):
         self.children = [self.indicate, self.label]
 
     def on_mouse_release(self, x, y, button, modifiers):
+        self.toggle()
+        return True
+
+    def toggle(self):
         self.active = not self.active
         self.indicate.color = self.activeColor if self.active else self.inactiveColor
         self.emit_signal('toggled')
+
+    def on_key_press(self, symbol, modifiers):
+        if super().on_key_press(symbol, modifiers):
+            return True
+        if symbol in (K.ENTER, K.SPACE):
+            self.toggle()
+            return True
 
 
 class Spin(Widget):
@@ -124,6 +148,7 @@ class Spin(Widget):
         ('layoutDirection', LayoutDirection.HORIZONTAL),
         ('solid', True),
         ('text', ''),
+        ('focusable', True),
     ])
     signals = ['value-changed']
 
@@ -167,6 +192,10 @@ class Spin(Widget):
             self.update_value(value)
         else:
             raise NotImplementedError()
+
+    def on_key_press(self, symbol, modifiers):
+        if super().on_key_press(symbol, modifiers):
+            return True
 
 
 def command(func):
