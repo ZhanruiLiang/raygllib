@@ -7,6 +7,7 @@ import pyximport
 pyximport.install()
 
 from . import _render
+from .base import TextAlign
 
 import raygllib.gllib as gl
 
@@ -95,10 +96,6 @@ class FontRender(Render):
         self.colorBuffer = gl.DynamicVertexBuffer()
         self.textureUnit = gl.TextureUnit(0)
 
-    @staticmethod
-    def get_char_size(fontSize):
-        return (fontSize // 2 + 2, fontSize)
-
     def set_texture(self, texture):
         gl.glActiveTexture(self.textureUnit.glenum)
         gl.glBindTexture(gl.GL_TEXTURE_2D, texture.glId)
@@ -106,39 +103,12 @@ class FontRender(Render):
 
     def draw_textboxs(self, textboxes):
         fontTexture = self.fontTexture
-        nChars = sum(len(t.text) for t in textboxes)
-        buffer = np.zeros((nChars, 8), dtype=gl.GLfloat)
-        id = 0
         for textbox in textboxes:
-            x0 = textbox.x
-            y0 = textbox.y
-            tw, th = self.get_char_size(textbox.fontSize)
-            w = textbox.width
-            x = x0 + tw / 2
-            y = y0 + th / 2
-            buffer[id:id + len(textbox.text), 3] = textbox.fontSize
-            buffer[id:id + len(textbox.text), 4:8] = textbox.color
-            for i, c in enumerate(textbox.text):
-                if c == '\n':
-                    buffer[id, 0] = x
-                    buffer[id, 1] = y
-                    buffer[id, 2] = fontTexture.charMap[' ']
-                    id += 1
-                    y += th
-                    x = x0 + tw / 2
-                else:
-                    if textbox.wrap and x + tw / 2 > x0 + w:
-                        y += th
-                        x = x0 + tw / 2
-                    try:
-                        charId = fontTexture.charMap[c]
-                    except KeyError:
-                        charId = fontTexture.charMap[' ']
-                    buffer[id, 0] = x
-                    buffer[id, 1] = y
-                    buffer[id, 2] = charId
-                    id += 1
-                    x += tw
+            state = self._make_state(textbox)
+            if textbox._renderState != state:
+                textbox._buffer = self._make_buffer(textbox)
+                textbox._renderState = state
+        buffer = np.vstack([textbox._buffer for textbox in textboxes])
         # Set buffers
         self.pcsBuffer.set_data(buffer[:, 0:4])
         self.colorBuffer.set_data(buffer[:, 4:8])
@@ -152,3 +122,60 @@ class FontRender(Render):
         self.set_matrix_uniform()
         # Start draw
         self.draw(gl.GL_POINTS, len(buffer))
+
+    def _iter_lines(self, text, wrapNum):
+        if wrapNum <= 0:
+            for line in text.split('\n'):
+                yield line
+            return
+
+        for line in text.split('\n'):
+            for i in range(0, len(line), wrapNum):
+                yield line[i:i + wrapNum]
+
+    def _make_state(self, textbox):
+        t = textbox
+        return (
+            id(t.text), t.color, t.fontSize, t.x, t.y, t.width, t.height, t.align,
+            t.wrap,
+        )
+
+    def _make_buffer(self, textbox):
+        charMap = self.fontTexture.charMap
+        tw, th = self.get_char_size(textbox.fontSize)
+        text = textbox.text
+        nChars = len(text) - text.count('\n')
+        x0 = textbox.x
+        y0 = textbox.y
+        w = textbox.width
+        # Init buffer
+        buffer = np.zeros((nChars, 8), dtype=gl.GLfloat)
+        buffer[:, 3] = textbox.fontSize
+        buffer[:, 4:8] = textbox.color
+
+        wrapNum = w // tw if textbox.wrap else 0
+        y = y0 + th / 2
+        id = 0
+        for line in self._iter_lines(text, wrapNum):
+            n = len(line)
+            for i, c in enumerate(line):
+                try:
+                    charId = charMap[c]
+                except KeyError:
+                    charId = charMap[' ']
+                buffer[id + i, 2] = charId
+            xs = np.arange(x0 + tw / 2, x0 + tw * n, tw)
+            if textbox.align is TextAlign.CENTER:
+                xs += (w - tw * n) / 2
+            elif textbox.align is TextAlign.RIGHT:
+                xs += w - tw * n
+            buffer[id:id + n, 0] = xs
+            buffer[id:id + n, 1] = y
+            y += th
+            id += n
+        return buffer
+
+
+    @staticmethod
+    def get_char_size(fontSize):
+        return (fontSize // 2 + 2, fontSize)

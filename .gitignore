@@ -27,3 +27,5 @@ doc
 /raygllib/_halfedge.html
 /raygllib/_halfedgeptr.c
 /raygllib/_halfedgeptr.pyx
+/raygllib/ui/_render.c
+/raygllib/ui/_render.cpython-33m.so
