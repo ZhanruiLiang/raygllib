@@ -1,19 +1,14 @@
 from .base import (
-    Widget, join_props, REQUIRED, TextBox, RectShape, Color, TextAlign, LayoutDirection,
+    Widget, join_props, REQUIRED, TextBox, RectShape, TextAlign, LayoutDirection,
 )
 from . import key as K
-
-colorDark = Color(.5, .5, .5, 1.)
-colorLight = Color(.8, .8, .8, 1.)
-colorActive = Color(.5, .8, .5, 1.)
-colorFontLight = Color(.9, .9, .9, 1.)
-colorFontDark = Color(.1, .1, .1, 1.)
-defaultFontSize = 14
+from . import theme
+from .event import EVENT_HANDLED
 
 
 class Panel(Widget):
     properties = join_props(Widget.properties, [
-        ('color', colorDark),
+        ('color', theme.colorDark),
         ('solid', True),
         ('focusable', False),
     ])
@@ -54,11 +49,11 @@ class Label(Widget):
 class Button(Widget):
     properties = join_props(Widget.properties, [
         ('solid', True),
-        ('fontColor', colorFontDark),
-        ('color', colorLight),
+        ('fontColor', theme.colorFontDark),
+        ('color', theme.colorLight),
         ('text', REQUIRED),
         ('height', 16),
-        ('fontSize', defaultFontSize),
+        ('fontSize', theme.defaultFontSize),
         ('focusable', True),
     ])
 
@@ -83,24 +78,24 @@ class Button(Widget):
 
     def on_mouse_release(self, x, y, button, modifiers):
         self.emit_signal('click')
-        return True
+        return EVENT_HANDLED
 
     def on_key_press(self, symbol, modifiers):
         if super().on_key_press(symbol, modifiers):
-            return True
+            return EVENT_HANDLED
         if symbol in (K.ENTER, K.SPACE):
             self.emit_signal('click')
-            return True
+            return EVENT_HANDLED
 
 
 class Switch(Panel):
     properties = join_props(Panel.properties, [
         ('text', REQUIRED),
         ('active', True),
-        ('activeColor', colorActive),
-        ('inactiveColor', colorDark),
-        ('color', colorLight),
-        ('fontColor', colorFontDark),
+        ('activeColor', theme.colorActive),
+        ('inactiveColor', theme.colorDark),
+        ('color', theme.colorLight),
+        ('fontColor', theme.colorFontDark),
         ('layoutDirection', LayoutDirection.HORIZONTAL),
         ('focusable', True),
     ])
@@ -114,13 +109,13 @@ class Switch(Panel):
             paddingX=5, paddingY=5, fixedSize=True, width=16)
         self.label = Label(
             textbox=TextBox(
-                text=self.text, fontSize=defaultFontSize, color=self.fontColor,
+                text=self.text, fontSize=theme.defaultFontSize, color=self.fontColor,
                 align=TextAlign.LEFT))
         self.children = [self.indicate, self.label]
 
     def on_mouse_release(self, x, y, button, modifiers):
         self.toggle()
-        return True
+        return EVENT_HANDLED
 
     def toggle(self):
         self.active = not self.active
@@ -129,22 +124,22 @@ class Switch(Panel):
 
     def on_key_press(self, symbol, modifiers):
         if super().on_key_press(symbol, modifiers):
-            return True
+            return EVENT_HANDLED
         if symbol in (K.ENTER, K.SPACE):
             self.toggle()
-            return True
+            return EVENT_HANDLED
 
 
 class Spin(Widget):
     properties = join_props(Widget.properties, [
-        ('backColor', colorDark),
-        ('color', colorActive),
-        ('fontColor', colorFontDark),
+        ('backColor', theme.colorDark),
+        ('color', theme.colorActive),
+        ('fontColor', theme.colorFontDark),
         ('value', 0.),
         ('minValue', 0.),
         ('maxValue', 1.),
         ('digits', 3),
-        ('fontSize', defaultFontSize),
+        ('fontSize', theme.defaultFontSize),
         ('layoutDirection', LayoutDirection.HORIZONTAL),
         ('solid', True),
         ('text', ''),
@@ -195,7 +190,7 @@ class Spin(Widget):
 
     def on_key_press(self, symbol, modifiers):
         if super().on_key_press(symbol, modifiers):
-            return True
+            return EVENT_HANDLED
 
 
 def command(func):

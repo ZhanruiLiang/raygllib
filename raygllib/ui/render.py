@@ -103,6 +103,9 @@ class FontRender(Render):
         gl.glUniform1i(self.get_uniform_loc('fontSampler'), self.textureUnit.id)
 
     def draw_textboxs(self, textboxes):
+        if not textboxes:
+            # Nothing to draw, exit to avoid np.vstack exception.
+            return
         fontTexture = self.fontTexture
         for textbox in textboxes:
             state = self._make_state(textbox)

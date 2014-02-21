@@ -16,6 +16,12 @@ class KeyCombination:
     def __repr__(self):
         return 'KeyCombination({}, {})'.format(self.key, self.mask)
 
+# class KeyCombManager:
+#     def __init__(self):
+#         self._handlers = {}
+# 
+#     def on_key_press(self, symbol, modifiers):
+#         pass
 
 def chain(*keys):
     kc = KeyCombination()

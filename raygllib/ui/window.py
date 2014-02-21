@@ -2,9 +2,10 @@ import numpy as np
 import pyglet
 
 import raygllib.gllib as gl
-from .base import Widget, Canvas, LayoutDirection, Color, RectShape, join_props
+from .base import Widget, Canvas, LayoutDirection, RectShape, join_props
 from .event import EVENT_HANDLED, EVENT_UNHANDLED
 from .render import RectRender, FontRender
+from .theme import Color
 
 __all__ = ['Window', 'EVENT_HANDLED', 'EVENT_UNHANDLED']
 
@@ -72,9 +73,11 @@ class FocusRect(RectShape):
 
 
 class Window(pyglet.window.Window):
+    KEY_REPEAT_INTERVAL = 0.04
+    KEY_REPEAT_DELAY = 0.4
+
     def __init__(self,
             vsync=True, config=pyglet.gl.Config(sample_buffers=1, samples=4), **kwargs):
-        super().__init__(vsync=vsync, config=config, **kwargs)
         self.root = Widget(x=0, y=0, fixedSize=True)
         self.color = Color(1., 1., 1., 1.)
         # Widgets is sorted by pre-order traversal
@@ -91,6 +94,11 @@ class Window(pyglet.window.Window):
 
         self.focus = None
         self._focusRect = FocusRect()
+
+        # Indicate if a key is pressing. Used in the key repeat system.
+        self._pressing = False
+
+        super().__init__(vsync=vsync, config=config, **kwargs)
 
     def _locate_widget_at(self, x, y):
         for widget in reversed(self._widgets):
@@ -136,10 +144,12 @@ class Window(pyglet.window.Window):
         self.relayout()
         self._fontRender.set_screen_size(w, h)
         self._rectRender.set_screen_size(w, h)
-        self._focusRect.on_relayout()
 
-    def on_key_press(self, symbol, modifiers):
+    def on_key_press(self, symbol, modifiers, _is_repeat=False):
         # print(symbol, modifiers)
+        if not _is_repeat:
+            self._pressing = (symbol, modifiers)
+            self._keyRepeatColdDown = self.KEY_REPEAT_DELAY
         for kc in self._shortcuts:
             if kc.key == symbol and (kc.mask & modifiers) == kc.mask:
                 for func in reversed(self._shortcuts[kc]):
@@ -148,6 +158,9 @@ class Window(pyglet.window.Window):
                         return
         if self.focus is not None:
             self.focus.on_key_press(symbol, modifiers)
+
+    def on_key_release(self, symbol, modifiers):
+        self._pressing = None
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         self._handle_mouse_event('on_mouse_drag', x, y, dx, dy, buttons, modifiers)
@@ -248,6 +261,7 @@ class Window(pyglet.window.Window):
         for widget in widgets:
             # print(widget.id, widget.x, widget.y, widget.width, widget.height)
             widget.on_relayout()
+        self._focusRect.on_relayout()
 
         self._widgets = widgets
         self._collect()
@@ -255,6 +269,12 @@ class Window(pyglet.window.Window):
 
     def update(self, dt):
         self._focusRect.update(dt)
+        if self._pressing:
+            self._keyRepeatColdDown -= dt
+            if self._keyRepeatColdDown <= 0:
+                symbol, modifiers = self._pressing
+                self.on_key_press(symbol, modifiers, _is_repeat=True)
+                self._keyRepeatColdDown += self.KEY_REPEAT_INTERVAL
 
     def _collect(self):
         self._textboxes = list(collect_textboxes(self.root))
