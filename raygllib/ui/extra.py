@@ -8,7 +8,7 @@ from .event import EVENT_HANDLED
 
 class Panel(Widget):
     properties = join_props(Widget.properties, [
-        ('color', theme.colorDark),
+        ('color', theme.colorLight.copy()),
         ('solid', True),
         ('focusable', False),
     ])
@@ -30,34 +30,56 @@ class Panel(Widget):
     def color(self, color):
         self.rect.color = color
 
-
-class Label(Widget):
-    properties = join_props(Widget.properties, [
-        ('textbox', REQUIRED),
+class Label(Widget, TextBox):
+    properties = join_props(Widget.properties, TextBox.properties, [
         ('focusable', False),
     ])
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.textboxes.append(self.textbox)
+        Widget.__init__(self, *args, **kwargs)
+        TextBox.__init__(self, *args, **kwargs)
+        self.textboxes.append(self)
 
-    def on_relayout(self):
-        super().on_relayout()
-        self.teach_geometry(self.textbox)
+# class Label(Widget):
+#     properties = join_props(Widget.properties, [
+#         ('focusable', False),
+#         ('text', REQUIRED),
+#     ])
+
+    # def __init__(self, *args, **kwargs):
+    #     names = [name for name, _ in TextBox.properties]
+    #     kwargs1 = {name: kwargs[name] for name in names if name in kwargs}
+    #     self._textbox = TextBox(**kwargs1)
+    #     names = [name for name, _ in Label.properties]
+    #     kwargs = {name: kwargs[name] for name in names if name in kwargs}
+    #     super().__init__(*args, **kwargs)
+    #     self.textboxes.append(self._textbox)
+
+    # @property
+    # def text(self):
+    #     return self._textbox.text
+
+    # @text.setter
+    # def text(self, text):
+    #     self._textbox.text = text
+
+    # def on_relayout(self):
+    #     super().on_relayout()
+    #     self.teach_geometry(self._textbox)
 
 
 class Button(Widget):
     properties = join_props(Widget.properties, [
         ('solid', True),
-        ('fontColor', theme.colorFontDark),
-        ('color', theme.colorLight),
+        ('fontColor', theme.colorFontDark.copy()),
+        ('color', theme.colorButton.copy()),
         ('text', REQUIRED),
         ('height', 16),
-        ('fontSize', theme.defaultFontSize),
+        ('fontSize', theme.fontSizeDefault),
         ('focusable', True),
     ])
 
-    signals = ['click']
+    signals = ['clicked']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -77,14 +99,14 @@ class Button(Widget):
         self.teach_geometry(self.rect)
 
     def on_mouse_release(self, x, y, button, modifiers):
-        self.emit_signal('click')
+        self.emit_signal('clicked')
         return EVENT_HANDLED
 
     def on_key_press(self, symbol, modifiers):
         if super().on_key_press(symbol, modifiers):
             return EVENT_HANDLED
         if symbol in (K.ENTER, K.SPACE):
-            self.emit_signal('click')
+            self.emit_signal('clicked')
             return EVENT_HANDLED
 
 
@@ -92,12 +114,13 @@ class Switch(Panel):
     properties = join_props(Panel.properties, [
         ('text', REQUIRED),
         ('active', True),
-        ('activeColor', theme.colorActive),
-        ('inactiveColor', theme.colorDark),
-        ('color', theme.colorLight),
-        ('fontColor', theme.colorFontDark),
+        ('activeColor', theme.colorActive.copy()),
+        ('inactiveColor', theme.colorDark.copy()),
+        ('color', theme.colorLight.copy()),
         ('layoutDirection', LayoutDirection.HORIZONTAL),
         ('focusable', True),
+        ('fixedSize', True),
+        ('height', 18),
     ])
 
     signals = ['toggled']
@@ -108,9 +131,9 @@ class Switch(Panel):
             solid=False, color=self.activeColor if self.active else self.inactiveColor,
             paddingX=5, paddingY=5, fixedSize=True, width=16)
         self.label = Label(
-            textbox=TextBox(
-                text=self.text, fontSize=theme.defaultFontSize, color=self.fontColor,
-                align=TextAlign.LEFT))
+            text=self.text, fontSize=theme.fontSizeDefault,
+            color=self.activeColor if self.active else self.inactiveColor,
+            align=TextAlign.LEFT)
         self.children = [self.indicate, self.label]
 
     def on_mouse_release(self, x, y, button, modifiers):
@@ -119,7 +142,8 @@ class Switch(Panel):
 
     def toggle(self):
         self.active = not self.active
-        self.indicate.color = self.activeColor if self.active else self.inactiveColor
+        self.indicate.color = self.label.color = \
+            self.activeColor if self.active else self.inactiveColor
         self.emit_signal('toggled')
 
     def on_key_press(self, symbol, modifiers):
@@ -129,17 +153,16 @@ class Switch(Panel):
             self.toggle()
             return EVENT_HANDLED
 
-
 class Spin(Widget):
     properties = join_props(Widget.properties, [
-        ('backColor', theme.colorDark),
-        ('color', theme.colorActive),
-        ('fontColor', theme.colorFontDark),
+        ('backColor', theme.colorDark.copy()),
+        ('color', theme.colorActive.copy()),
+        ('fontColor', theme.colorFontLight.copy()),
         ('value', 0.),
         ('minValue', 0.),
         ('maxValue', 1.),
         ('digits', 3),
-        ('fontSize', theme.defaultFontSize),
+        ('fontSize', theme.fontSizeDefault),
         ('layoutDirection', LayoutDirection.HORIZONTAL),
         ('solid', True),
         ('text', ''),
@@ -161,10 +184,12 @@ class Spin(Widget):
 
         self.update_value(self.value, sendEvent=False)
 
+    def format_value(self, value):
+        return '{{:.{}f}}'.format(self.digits).format(value)
+
     def update_value(self, value, sendEvent=True):
-        self._text.text = '{{}}: {{:.{}f}}'\
-            .format(self.digits).format(self.text, self.value)
         value = min(max(self.minValue, value), self.maxValue)
+        self._text.text = self.text + ': ' + self.format_value(value)
         self._bar.width = (value - self.minValue) / (self.maxValue - self.minValue)\
             * self._back.width
         if value != self.value:
@@ -193,12 +218,79 @@ class Spin(Widget):
             return EVENT_HANDLED
 
 
-def command(func):
-    func.isCommand = True
-    return func
+class ColorPicker(Widget):
+    properties = join_props(Widget.properties, [
+        ('color', theme.Color(0., 0., 0., 0.)),
+        ('layoutDirection', LayoutDirection.VERTICAL),
+    ])
 
-class CommandBar(Widget):
+    signals = ['value-changed']
 
-    @command
-    def focus(self, name):
-        pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        name = 'RGB'
+        self.spins = []
+        for i in range(3):
+            color = theme.Color(.4, .4, .4, 1.)
+            color[i] = .8
+            spin = Spin(
+                text=name[i], color=color, digits=0, fontSize=theme.fontSizeSmall,
+                value=self.color[i] * 255, minValue=0, maxValue=255,
+                paddingX=0, paddingY=0,
+            )
+            self.spins.append(spin)
+            spin.connect_signal('value-changed', self.update_color)
+        self.hexIndicator = Label(text='')
+        self.colorIndicator = Panel(
+            color=self.color, paddingX=0, paddingY=0, height=20, fixedSize=1,
+            layoutDirection=LayoutDirection.VERTICAL,
+            children=[self.hexIndicator])
+        self.children = [self.colorIndicator] + self.spins
+
+    def update_color(self):
+        name = 0
+        for i, spin in enumerate(self.spins):
+            self.color[i] = spin.value / 255.
+            name = (name << 8) | int(spin.value + .5)
+        self.colorIndicator.color = self.color
+        self.hexIndicator.text = hex(name)
+        self.emit_signal('value-changed')
+
+
+class Title(Label):
+    properties = join_props(Label.properties, [
+        ('fixedSize', True),
+        ('fontSize', 15),
+        ('height', 18),
+        ('color', theme.colorFontLight.copy()),
+        ('backColor', theme.colorTitle.copy()),
+        ('align', TextAlign.CENTER),
+    ])
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._rect = RectShape(color=self.backColor)
+        self.rects.append(self._rect)
+
+    def on_relayout(self):
+        super().on_relayout()
+        self.teach_geometry(self._rect)
+
+
+class SubTitle(Title):
+    properties = join_props(Title.properties, [
+        ('backColor', theme.colorSubTitle.copy()),
+        ('fontSize', 14),
+        ('height', 16),
+        ('align', TextAlign.LEFT),
+    ])
+
+# def command(func):
+#     func.isCommand = True
+#     return func
+# 
+# class CommandBar(Widget):
+# 
+#     @command
+#     def focus(self, name):
+#         pass

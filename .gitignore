@@ -29,3 +29,9 @@ doc
 /raygllib/_halfedgeptr.pyx
 /raygllib/ui/_render.c
 /raygllib/ui/_render.cpython-33m.so
+/raygllib/_model.cpython-33m.so
+/raygllib/_model.c
+/raygllib/_model.html
+/tmux-client-11887.log
+/tests/models/Hand.OBJ
+/tests/.swp

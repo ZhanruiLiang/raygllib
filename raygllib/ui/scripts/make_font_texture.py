@@ -3,7 +3,7 @@ import os
 import json
 import string as String
 
-def make_font_texture(fontname, fontsize, gridsize, m, string, savepath):
+def make_font_texture(fontname, fontsize, bold, gridsize, m, string, savepath):
     if not string:
         string = String.printable
         # string = [chr(i) for i in range(256)]
@@ -13,7 +13,7 @@ def make_font_texture(fontname, fontsize, gridsize, m, string, savepath):
     screen = pg.display.set_mode((gw * m, gh * ((len(string) + m - 1) // m)), 0, 32)
     surface = screen.copy().convert_alpha()
 
-    font = pg.font.SysFont(fontname, fontsize)
+    font = pg.font.SysFont(fontname, fontsize, bold=bold)
 
     x = gw // 2
     y = gh // 2
@@ -44,5 +44,5 @@ def make_font_texture(fontname, fontsize, gridsize, m, string, savepath):
 
 if __name__ == '__main__':
     import sys
-    fontname, fontsize, gridw, gridh, m, string, savepath = sys.argv[1:]
-    make_font_texture(fontname, int(fontsize), (int(gridw), int(gridh)), int(m), string, savepath) 
+    fontname, fontsize, bold, gridw, gridh, m, string, savepath = sys.argv[1:]
+    make_font_texture(fontname, int(fontsize), bool(bold), (int(gridw), int(gridh)), int(m), string, savepath) 

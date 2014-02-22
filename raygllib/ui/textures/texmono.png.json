@@ -1,1 +1,1 @@
-{"rowsize": 20, "source": "texmono.png", "fontsize": 64, "gridwidth": 50, "fontname": "monospace", "gridheight": 70, "string": "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\u000b\f"}
+{"fontsize": 64, "source": "texmono.png", "gridwidth": 50, "fontname": "dejavusansmono", "gridheight": 70, "rowsize": 20, "string": "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\u000b\f"}

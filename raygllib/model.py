@@ -1,6 +1,7 @@
 import pyximport
 pyximport.install()
 
+import collada
 from OpenGL.GL import *
 from .gllib import VertexBuffer, Texture2D, IndexBuffer
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from . import _model
 from . import utils
 from . import matlib as M
+from . import config
 from .utils import debug
 
 def vector(v):
@@ -131,9 +133,9 @@ class Model:
     def __init__(self, name, geometry, matrix):
         self.name = name
         self.geometry = geometry
-        self.matrix = matrix
+        self.matrix = matrix.astype(GLfloat)
 
-    def update(self):
+    def update(self, dt):
         pass
 
     def free(self):
@@ -141,6 +143,8 @@ class Model:
 
 
 class Joint:
+    id = -1
+
     def __init__(self, name, parent, invBindMatrix, matrix):
         self.name = name
         self.parent = parent
@@ -157,8 +161,8 @@ class Joint:
     def angle(self, angle):
         if np.abs(self._angle - angle) < 1e-4:
             return
+        self._angle = angle
         # m0 = self._matrixOrigin
-        # self._angle = angle
         # R = M.rotate(angle, m0[:3, 3] / m0[3, 3], m0[:3, 0])
         # self.matrix = R.dot(m0)
         c = np.cos(angle)
@@ -174,31 +178,32 @@ class Joint:
         else:
             self.globalMatrix = self.matrix
 
-class ArmaturedModel:
+    def __repr__(self):
+        if self.parent:
+            return 'Joint({}, {}, parent={})'.format(self.id, self.name, self.parent.name)
+        else:
+            return 'Joint({}, {})'.format(self.id, self.name)
+
+
+class ArmaturedModel(Model):
     def __init__(self, name, geometry, matrix, vertexWeights, vertexJointIds, joints):
         """
         joints must be sorted in topology order.
         """
-        self.name = name
-        self.geometry = geometry
-        self.matrix = matrix
+        super().__init__(name, geometry, matrix)
         self.vertexWeights = VertexBuffer(vertexWeights)
         self.vertexJointIds = VertexBuffer(vertexJointIds)
         self.joints = joints
+        if config.drawJointAxis:
+            self.axies = [Axis(0.1, joint.matrix) for joint in joints]
+        self.update(0)
 
     def free(self):
         self.vertexWeights.free()
         self.vertexJointIds.free()
 
     def get_joint_matrices(self):
-        joints = self.joints
-        matrices = np.zeros((4 * len(joints), 4), dtype=GLfloat)
-        for i, joint in enumerate(joints):
-            joint.update()
-            matrices[i * 4:i * 4 + 4, :] = \
-                np.dot(joint.globalMatrix, joint.invBindMatrix).T
-        # debug(utils.format_matrix(matrices))
-        return matrices.flatten()
+        return self._matrices.flatten()
 
     # def validate(self):
     #     joints = self.joints
@@ -206,8 +211,18 @@ class ArmaturedModel:
     #         joint.update()
     #         debug(utils.format_matrix(joint.matrix.dot(joint.invBindMatrix)))
 
-    def update(self):
-        pass
+    def update(self, dt):
+        joints = self.joints
+        matrices = np.zeros((4 * len(joints), 4), dtype=GLfloat)
+        for i, joint in enumerate(joints):
+            joint.update()
+            if config.drawJointAxis:
+                axis = self.axies[i]
+                axis.matrix = joint.globalMatrix.dot(M.scale(axis.scale))
+            id = joint.id
+            matrices[id * 4:id * 4 + 4, :] = \
+                np.dot(joint.globalMatrix, joint.invBindMatrix).T
+        self._matrices = matrices
 
 
 class Material:
@@ -241,3 +256,188 @@ class Light:
         self.color = color
         self.power = power
         self.enabled = True
+
+
+class Axis(Model):
+    _geometry = None
+
+    @classmethod
+    def get_geometry(cls):
+        if cls._geometry is None:
+            scene = Scene.load(utils.file_relative_path(__file__, 'models', 'axis.dae'))
+            cls._geometry = scene.geometries[0]
+        return cls._geometry
+
+    def __init__(self, scale, matrix):
+        self.scale = scale
+        super().__init__('axis', self.get_geometry(), matrix)
+
+
+def load_scene(path):
+    mesh = collada.Collada(path)
+    scene = Scene()
+    joints = None
+
+    for node in mesh.scene.nodes:
+        matrix = node.matrix
+        node = node.children[0]
+        # debug(type(node))
+        if isinstance(node, collada.scene.CameraNode):
+            # camera = Camera(pos, (0, 0, 0), up)
+            # scene.camera.append(camera)
+            pass
+        elif isinstance(node, collada.scene.GeometryNode):
+            geometry = build_geometry(scene, mesh, node.geometry)
+            scene.geometries.append(geometry)
+            model = Model(geometry.name, geometry, matrix)
+            scene.models.append(model)
+        elif isinstance(node, collada.scene.ControllerNode):
+            controller = node.controller
+            geom = node.controller.geometry
+            geometry = build_geometry(scene, mesh, geom)
+            scene.geometries.append(geometry)
+
+            maxJointsPerVertex = 4
+            nVertices = len(controller.weight_index)
+            poly = geom.primitives[0]
+            vertexIds = poly.index[:, 0]
+            weightData = controller.weights.data.flatten()
+            weightIndex = controller.weight_index
+            weights = np.zeros((nVertices, maxJointsPerVertex), dtype=GLfloat)
+            jointIds = np.zeros((nVertices, maxJointsPerVertex), dtype=GLfloat)
+            jointIndex = controller.joint_index
+            nExceedVertex = 0
+            for i in range(nVertices):
+                wIndex = weightIndex[i]
+                jIndex = jointIndex[i]
+                nJoints = len(jIndex)
+                if nJoints > maxJointsPerVertex:
+                    nExceedVertex += 1
+                    data = list(zip(-weightData[wIndex], jIndex))
+                    data.sort()
+                    data = data[:maxJointsPerVertex]
+                    weights[i, :] = [-w for w, _ in data]
+                    weights[i] /= weights[i].sum()
+                    jointIds[i, :] = [j for _, j in data]
+                    # weights[i, :] = 0
+                else:
+                    weights[i, :nJoints] = weightData[wIndex]
+                    jointIds[i, :nJoints] = jIndex
+            debug('WARNNING: nExceedVertex', nExceedVertex)
+            weights = weights[vertexIds]
+            jointIds = jointIds[vertexIds]
+            # Make joints
+            for joint in joints:
+                joint.invBindMatrix =\
+                    controller.joint_matrices[joint.name.encode('utf-8')]
+            debug('nJoinst:', len(joints))
+
+            jointSouce = controller.sourcebyid[controller.joint_source]
+            nameToJoint = {joint.name: joint for joint in joints}
+            for i, name in enumerate(jointSouce):
+                joint = nameToJoint[name.decode('utf-8')]
+                joint.id = i
+            del nameToJoint, jointSouce
+
+            # list(map(debug, joints))
+
+            # Make armatured model
+            # debug('model matrix', matrix)
+            matrix = controller.bind_shape_matrix
+            # debug('bind_shape_matrix', matrix)
+            model = ArmaturedModel(
+                geometry.name, geometry, matrix, weights, jointIds, joints)
+
+            scene.models.append(model)
+        elif isinstance(node, collada.scene.LightNode):
+            daeLight = node.light
+            light = Light(matrix[0:3, 3], daeLight.color, config.defaultLightPower)
+            scene.lights.append(light)
+        else:
+            attrib = node.xmlnode.attrib
+            type = attrib.get('type', '') or attrib.get('TYPE')
+            if type.lower() == 'joint':
+                joints = []
+                build_joint_hierachy(node, None, joints)
+    return scene
+
+
+def build_joint_hierachy(node, parent, joints):
+    joint = Joint(node.xmlnode.attrib['sid'], parent, None, node.matrix)
+    joints.append(joint)
+    for subNode in node.children:
+        build_joint_hierachy(subNode, joint, joints)
+
+
+def build_geometry(scene, mesh, geometryCollada):
+    geom = geometryCollada
+    name = geom.name
+    poly = geom.primitives[0]
+    daeMat = mesh.materials[poly.material]
+    if hasattr(daeMat, '_gllibMaterail'):
+        material = daeMat._gllibMaterail
+    else:
+        if hasattr(daeMat.effect.diffuse, 'sampler'):
+            diffuse = daeMat.effect.diffuse.sampler.surface.image.getImage()
+            diffuseType = Material.DIFFUSE_TEXTURE
+        else:
+            diffuse = daeMat.effect.diffuse[:3]
+            diffuseType = Material.DIFFUSE_COLOR
+        material = daeMat._gllibMaterail = Material(
+            daeMat.name, diffuseType, diffuse,
+            Ka=(daeMat.effect.ambient[:3]
+                if not isinstance(daeMat.effect.ambient, collada.material.Map)
+                else (0., 0., 0.)),
+            Ks=daeMat.effect.specular[:3],
+            shininess=daeMat.effect.shininess,
+        )
+    index = poly.index
+    indexTupleSize = 3 if material.diffuseType == Material.DIFFUSE_TEXTURE else 2
+    index = index.reshape((index.size // indexTupleSize, indexTupleSize))
+    debug('load geometry: nVertices={}, nFaces={}, nIndices={}'.format(
+        len(poly.vertex), len(index) // 3, len(index)))
+    # return CompressedGeometry(
+    return Geometry(
+        name, poly.vertex, poly.normal,
+        (poly.texcoordset[0] if indexTupleSize == 3 else None),
+        index, material,
+    )
+
+
+class Scene:
+    @classmethod
+    def load(self, path):
+        with utils.timeit_context('load model'):
+            scene = load_scene(path)
+        return scene
+
+    def __init__(self):
+        self.lights = []
+        self.models = []
+        self.geometries = []
+
+    def get_model(self, name):
+        for model in self.models:
+            if model.name == name:
+                return model
+        raise KeyError(name)
+
+    def add_light(self, light=None):
+        if not light:
+            light = Light((10., 10., 10.), (1., 1., 1.), config.defaultLightPower)
+        self.lights.append(light)
+
+    def free(self):
+        for geometry in self.geometries:
+            geometry.free()
+        for model in self.models:
+            model.free()
+        self.models = []
+        self.lights = []
+
+    def update(self, dt):
+        for model in self.models:
+            model.update(dt)
+
+    def __del__(self):
+        self.free()

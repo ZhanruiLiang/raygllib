@@ -22,6 +22,7 @@ const float roomSize = 10;
 in vec2 uv;
 in vec3 normalCamSpace;
 in vec3 posCamSpace;
+in float weight;
 
 out vec3 fragColor;
 
@@ -89,4 +90,5 @@ void main() {
 
         fragColor += mtlDiffuseColor * intensity * d + intensity * Ks * pow(s, shininess);
     }
+    /*fragColor = fragColor * 0.5 + vec3(weight, 0, 0);*/
 }

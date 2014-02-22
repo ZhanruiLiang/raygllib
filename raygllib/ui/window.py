@@ -1,18 +1,14 @@
-import numpy as np
 import pyglet
 
 import raygllib.gllib as gl
-from .base import Widget, Canvas, LayoutDirection, RectShape, join_props
+from .base import Widget, Canvas, RectShape, join_props
 from .event import EVENT_HANDLED, EVENT_UNHANDLED
 from .render import RectRender, FontRender
 from .theme import Color
+from .layout import LayoutManager
+from . import theme
 
 __all__ = ['Window', 'EVENT_HANDLED', 'EVENT_UNHANDLED']
-
-def preorder_traversal(widget):
-    yield widget
-    for child in widget.children:
-        yield from preorder_traversal(child)
 
 def collect_rects(widget):
     for rect in widget.rects:
@@ -35,11 +31,12 @@ def collect_canvases(widget):
 
 class FocusRect(RectShape):
     properties = join_props(RectShape.properties, [
-        ('color', Color(.5, .5, .4, 1.)),
+        ('color', theme.colorFocus.copy()),
     ])
     BLINK_INTERVAL = 1.2
     MIN_ALPHA = 0.2
     MAX_ALPHA = 0.4
+    HEIGHT_ON_CANVAS = 10
     _time = 0
     _target = None
 
@@ -65,11 +62,15 @@ class FocusRect(RectShape):
         self._target = target
         if target:
             target.teach_properties(self, ('x', 'y', 'width', 'height'))
+            if isinstance(self.target, Canvas):
+                self.height = self.HEIGHT_ON_CANVAS
         self._time = 0
 
     def on_relayout(self):
         if self.target:
             self.target.teach_properties(self, ('x', 'y', 'width', 'height'))
+            if isinstance(self.target, Canvas):
+                self.height = self.HEIGHT_ON_CANVAS
 
 
 class Window(pyglet.window.Window):
@@ -77,9 +78,13 @@ class Window(pyglet.window.Window):
     KEY_REPEAT_DELAY = 0.4
 
     def __init__(self,
-            vsync=True, config=pyglet.gl.Config(sample_buffers=1, samples=4), **kwargs):
-        self.root = Widget(x=0, y=0, fixedSize=True)
-        self.color = Color(1., 1., 1., 1.)
+            vsync=True, config=pyglet.gl.Config(sample_buffers=1, samples=4),
+            color=Color(1., 1., 1., 1.),
+            **kwargs):
+        self._root = Widget(x=0, y=0, fixedSize=True)
+        self._layoutManager = LayoutManager(self._root)
+        self._needRelayout = True
+        self.color = color
         # Widgets is sorted by pre-order traversal
         self._widgets = []
         self._textboxes = []
@@ -99,6 +104,10 @@ class Window(pyglet.window.Window):
         self._pressing = False
 
         super().__init__(vsync=vsync, config=config, **kwargs)
+
+    @property
+    def root(self):
+        return self._root
 
     def _locate_widget_at(self, x, y):
         for widget in reversed(self._widgets):
@@ -141,7 +150,7 @@ class Window(pyglet.window.Window):
     def on_resize(self, w, h):
         self.root.width = w
         self.root.height = h
-        self.relayout()
+        self.request_relayout()
         self._fontRender.set_screen_size(w, h)
         self._rectRender.set_screen_size(w, h)
 
@@ -181,93 +190,18 @@ class Window(pyglet.window.Window):
     def on_mouse_release(self, x, y, button, modifiers):
         self._handle_mouse_event('on_mouse_release', x, y, button, modifiers)
 
+    def request_relayout(self):
+        self._needRelayout = True
+
     def relayout(self):
-        widgets = list(preorder_traversal(self.root))
-        for widget in widgets:
-            widget._varId = [-1, -1]
-            for child in widget.children:
-                child.parent = widget
-        nVars = 0
-        nEquations = 0
-
-        def new_id():
-            nonlocal nVars
-            nVars += 1
-            return nVars - 1
-
-        for widget in widgets:
-            for i in range(2):
-                if widget._varId[i] == -1:
-                    widget._varId[i] = new_id()
-            if widget.children:
-                i = 1 - widget.layoutDirection
-                for child in widget.children:
-                    child._varId[i] = widget._varId[i]
-                nEquations += 1
-            if widget.fixedSize:
-                nEquations += 2
-
-        # A x = b
-        A = np.zeros((nEquations, nVars), dtype=np.double)
-        b = np.zeros(nEquations, dtype=np.double)
-        equationId = 0
-        for widget in widgets:
-            i = widget.layoutDirection
-            if widget.children:
-                A[equationId, widget._varId[i]] = 1 
-                for child in widget.children:
-                    A[equationId, child._varId[i]] = -1
-                equationId += 1
-            if widget.fixedSize:
-                if not widget.parent\
-                        or widget.parent.layoutDirection == LayoutDirection.VERTICAL:
-                    A[equationId, widget._varId[1]] = 1
-                    b[equationId] = widget.height
-                    equationId += 1
-                if not widget.parent\
-                        or widget.parent.layoutDirection == LayoutDirection.HORIZONTAL:
-                    A[equationId, widget._varId[0]] = 1
-                    b[equationId] = widget.width
-                    equationId += 1
-
-        x = np.linalg.lstsq(A, b)[0]
-        # print('matrix shape', A.shape)
-        # print('A', A)
-        # print('b', b)
-        for widget in widgets:
-            if widget.fixedSize:
-                if widget.parent is not None:
-                    if widget.parent.layoutDirection == LayoutDirection.HORIZONTAL:
-                        widget.height = x[widget._varId[1]]
-                    else:
-                        widget.width = x[widget._varId[0]]
-            else:
-                widget.width = x[widget._varId[0]]
-                widget.height = x[widget._varId[1]]
-
-        for widget in widgets:
-            posX, posY = widget.x, widget.y
-            if widget.layoutDirection == LayoutDirection.HORIZONTAL:
-                for child in widget.children:
-                    child.x = posX
-                    child.y = posY
-                    posX += child.width
-            elif widget.layoutDirection == LayoutDirection.VERTICAL:
-                for child in widget.children:
-                    child.x = posX
-                    child.y = posY
-                    posY += child.height
-
-        for widget in widgets:
-            # print(widget.id, widget.x, widget.y, widget.width, widget.height)
-            widget.on_relayout()
+        self._needRelayout = False
+        self._layoutManager.relayout()
         self._focusRect.on_relayout()
-
-        self._widgets = widgets
-        self._collect()
-        self._make_focus_chain()
+        self._collect(self._layoutManager.widgets)
 
     def update(self, dt):
+        if self._needRelayout:
+            self.relayout()
         self._focusRect.update(dt)
         if self._pressing:
             self._keyRepeatColdDown -= dt
@@ -276,11 +210,15 @@ class Window(pyglet.window.Window):
                 self.on_key_press(symbol, modifiers, _is_repeat=True)
                 self._keyRepeatColdDown += self.KEY_REPEAT_INTERVAL
 
-    def _collect(self):
+    def _collect(self, widgets):
+        self._widgets = widgets
         self._textboxes = list(collect_textboxes(self.root))
         self._rects = list(collect_rects(self.root))
         self._canvases = list(collect_canvases(self.root))
         self._rects.append(self._focusRect)
+        self._make_focus_chain()
+        for widget in widgets:
+            widget.request_relayout = self.request_relayout
 
     def _make_focus_chain(self):
         widgets = [widget for widget in self._widgets if widget.focusable]
@@ -300,18 +238,19 @@ class Window(pyglet.window.Window):
         gl.glClearColor(*self.color)
         self.clear()
         root = self.root
-        for canvas in self._canvases:
-            gl.glViewport(
-                canvas.x,
-                root.height - (canvas.y + canvas.height),
-                canvas.x + canvas.width, 
-                root.height - canvas.y)
-            canvas.draw()
-
-        gl.glViewport(0, 0, self.root.width, self.root.height)
+        gl.glViewport(0, 0, int(self.root.width), int(self.root.height))
 
         with self._rectRender.batch_draw():
             self._rectRender.draw_rects(self._rects)
 
         with self._fontRender.batch_draw():
             self._fontRender.draw_textboxs(self._textboxes)
+
+        for canvas in self._canvases:
+            gl.glViewport(
+                int(canvas.x),
+                int(root.height - (canvas.y + canvas.height)),
+                int(canvas.width), 
+                int(canvas.height),
+            )
+            canvas.draw()

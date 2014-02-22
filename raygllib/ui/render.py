@@ -32,6 +32,7 @@ class Render(gl.Program):
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
 
     def set_matrix_uniform(self):
         gl.glUniformMatrix4fv(self.get_uniform_loc('matrix'), 1, gl.GL_TRUE, self.matrix)
@@ -53,12 +54,16 @@ class RectRender(Render):
 
     # @profile
     def draw_rects(self, rects):
+        # gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
         # rects = [rect for rect in rects if rect.visible]
         nRects = len(rects)
         psBuffer = np.zeros((nRects, 4), dtype=gl.GLfloat)
         colorBuffer = np.zeros((nRects, 4), dtype=gl.GLfloat)
 
         _render.make_rects_buffer(rects, psBuffer, colorBuffer)
+        # print('-'* 80)
+        # for i in range(nRects):
+        #     print(i, 'pos', psBuffer[i, 0:2], 'size', psBuffer[i, 2:4], 'color', colorBuffer[i])
 
         # Set buffers
         self.psBuffer.set_data(psBuffer)
@@ -140,8 +145,8 @@ class FontRender(Render):
     def _make_state(self, textbox):
         t = textbox
         return (
-            id(t.text), t.color, t.fontSize, t.x, t.y, t.width, t.height, t.align,
-            t.wrap,
+            id(t.text), len(t.text), t.color, t.fontSize, t.wrap,
+            t.x, t.y, t.width, t.height, t.align,
         )
 
     def _make_buffer(self, textbox):
@@ -157,7 +162,7 @@ class FontRender(Render):
         buffer[:, 3] = textbox.fontSize
         buffer[:, 4:8] = textbox.color
 
-        wrapNum = w // tw if textbox.wrap else 0
+        wrapNum = int(w // tw) if textbox.wrap else 0
         y = y0 + th / 2
         id = 0
         for line in self._iter_lines(text, wrapNum):

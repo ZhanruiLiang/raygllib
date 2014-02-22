@@ -1,6 +1,14 @@
-import raygllib.ui as ui
+from gi.repository import Gtk, Gdk
+Gdk.threads_init()
+from gi.repository import GLib
+from threading import Thread, RLock, Condition
+from .utils import debug
+from ._threadutils import Require
 import math
 import pickle
+
+VERTICAL = Gtk.Orientation.VERTICAL
+HORIZONTAL = Gtk.Orientation.HORIZONTAL
 
 class VectorSpin(Gtk.Box):
     def __init__(self, var, valRange, normalize=False, orientation=VERTICAL):

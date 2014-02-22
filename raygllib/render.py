@@ -82,6 +82,11 @@ class Renderer(Program):
             glUniformMatrix4fv(self.get_uniform_loc('jointMats'),
                 len(model.joints), GL_FALSE, model.get_joint_matrices())
             model.geometry.draw()
+            if config.drawJointAxis:
+                glDisable(GL_DEPTH_TEST)
+                for axis in model.axies:
+                    self.draw_model(axis)
+                glEnable(GL_DEPTH_TEST)
         else:
             glUniform1i(self.get_uniform_loc('hasArmature'), 0)
             # Disable unused attributes.

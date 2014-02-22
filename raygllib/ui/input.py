@@ -93,12 +93,15 @@ class Editor:
 
 class TextInput(Widget, Editor):
     properties = join_props(Widget.properties, [
-        ('backColor', theme.colorTextInput),
-        ('fontColor', theme.colorFontDark),
-        ('fontSize', theme.defaultFontSize),
+        ('backColor', theme.colorTextInput.copy()),
+        ('fontColor', theme.colorFontDark.copy()),
+        ('hintColor', theme.colorFontDarkHint.copy()),
+        ('fontSize', theme.fontSizeDefault),
+        ('hint', ''),
         ('solid', True),
         ('focusable', True),
         ('text', ''),
+        ('wrap', False),
     ])
 
     def __init__(self, *args, **kwargs):
@@ -106,13 +109,21 @@ class TextInput(Widget, Editor):
         Widget.__init__(self, *args, **kwargs)
         self._textbox = TextBox(
             text=self.text, fontSize=self.fontSize, color=self.fontColor,
-            align=TextAlign.LEFT,
+            align=TextAlign.CENTER, wrap=self.wrap,
         )
         self._back = RectShape(color=self.backColor)
         self.textboxes.append(self._textbox)
+        self.rects.append(self._back)
+
+        self.on_text_update()
 
     def on_text_update(self):
-        self._textbox.text = self.text
+        if self.text:
+            self._textbox.text = self.text
+            self._textbox.color = self.fontColor
+        else:
+            self._textbox.text = self.hint
+            self._textbox.color = self.hintColor
 
     def on_relayout(self):
         super().on_relayout()
@@ -192,6 +203,9 @@ class PathHistory(History):
 
 
 class PathInput(TextInput):
+    properties = join_props(TextInput.properties, [
+        ('wrap', True),
+    ])
     signals = ['open']
 
     def __init__(self, *args, **kwargs):
