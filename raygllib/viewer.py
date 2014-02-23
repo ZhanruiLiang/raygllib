@@ -198,7 +198,8 @@ class FileLoader(ui.Widget):
     def __init__(self, viewer):
         super().__init__(layoutDirection=VERTICAL)
         self.viewer = viewer
-        pathInput = ui.PathInput(hint='Path', fixedSize=True, height=40)
+        pathInput = ui.PathInput(
+            hint='Input path to load scene', fixedSize=True, height=40)
         self.children.append(pathInput)
         pathInput.connect_signal('open', self.load, pathInput)
 

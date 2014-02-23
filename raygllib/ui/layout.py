@@ -39,6 +39,32 @@ class LayoutManager:
             return 'fw:{} vw:{} fh:{} vh:{}'.format(
                 fixedW[i], varyW[i], fixedH[i], varyH[i])
 
+        def set_fixed_vary(i, fixed, vary, matchDir, attr, pattr):
+            widget = widgets[i]
+            for child in widget.children:
+                set_fixed_vary(idMap[child], fixed, vary, matchDir, attr, pattr)
+            dir = widget.layoutDirection
+            if widget.parent and widget.parent.layoutDirection == matchDir\
+                    and widget.fixedSize:
+                fixed[i] = getattr(widget, attr)
+            elif not widget.children:
+                vary[i] = 1
+            else:
+                padding = getattr(widget, pattr) * 2
+                if dir != matchDir:
+                    # Say, if we are setting width, then dir == VERTICAL now.
+                    for child in widget.children:
+                        j = idMap[child]
+                        fixed[i] = max(fixed[i], fixed[j] + padding)
+                        vary[i] = max(vary[i], vary[j])
+                else:
+                    fixed[i] = padding
+                    # Say, if we are setting width, then dir == HORIZONTAL now.
+                    for child in widget.children:
+                        j = idMap[child]
+                        fixed[i] += fixed[j]
+                        vary[i] += vary[j]
+
         def set_size(i, total, fixed, vary, matchDir, attr):
             widget = widgets[i]
             dir = widget.layoutDirection
@@ -64,34 +90,11 @@ class LayoutManager:
 
             setattr(widget, attr, total)
 
-        def set_fixed_vary(i, fixed, vary, matchDir, attr):
-            widget = widgets[i]
-            for child in widget.children:
-                set_fixed_vary(idMap[child], fixed, vary, matchDir, attr)
-            dir = widget.layoutDirection
-            if widget.parent and widget.parent.layoutDirection == matchDir\
-                    and widget.fixedSize:
-                fixed[i] = getattr(widget, attr)
-            elif not widget.children:
-                vary[i] = 1
-            else:
-                if dir != matchDir:
-                    # Say, if we are setting width, then dir == VERTICAL now.
-                    for child in widget.children:
-                        j = idMap[child]
-                        fixed[i] = max(fixed[i], fixed[j])
-                        vary[i] = max(vary[i], vary[j])
-                else:
-                    # Say, if we are setting width, then dir == HORIZONTAL now.
-                    for child in widget.children:
-                        j = idMap[child]
-                        fixed[i] += fixed[j]
-                        vary[i] += vary[j]
 
         # _dump_widget_tree(widgets[0], extra_info)
 
-        set_fixed_vary(0, fixedW, varyW, HORIZONTAL, 'width')
-        set_fixed_vary(0, fixedH, varyH, VERTICAL, 'height')
+        set_fixed_vary(0, fixedW, varyW, HORIZONTAL, 'width', 'paddingX')
+        set_fixed_vary(0, fixedH, varyH, VERTICAL, 'height', 'paddingY')
         set_size(0, widgets[0].width, fixedW, varyW, HORIZONTAL, 'width')
         set_size(0, widgets[0].height, fixedH, varyH, VERTICAL, 'height')
 

@@ -7,7 +7,7 @@ import pyximport
 pyximport.install()
 
 from . import _render
-from .base import TextAlign
+from .base import TextAlign, TextHAlign
 
 import raygllib.gllib as gl
 
@@ -157,6 +157,7 @@ class FontRender(Render):
         x0 = textbox.x
         y0 = textbox.y
         w = textbox.width
+        h = textbox.height
         # Init buffer
         buffer = np.zeros((nChars, 8), dtype=gl.GLfloat)
         buffer[:, 3] = textbox.fontSize
@@ -182,8 +183,15 @@ class FontRender(Render):
             buffer[id:id + n, 1] = y
             y += th
             id += n
+            if y - th / 2 > h:
+                break
+        buffer = buffer[:id]
+        actualHeight = (y - th / 2 - y0)
+        if textbox.halign == TextHAlign.CENTER:
+            buffer[:, 1] += (h - actualHeight) / 2
+        elif textbox.halign == TextHAlign.BOTTOM:
+            buffer[:, 1] += h - actualHeight
         return buffer
-
 
     @staticmethod
     def get_char_size(fontSize):
