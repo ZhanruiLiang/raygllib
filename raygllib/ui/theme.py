@@ -12,20 +12,9 @@ class Color(list):
                 (rgb & 0xff) / 255, 
                 a])
         elif len(args) == 3:
-            super().__init__(args + [1.])
+            super().__init__(list(args) + [1.])
         elif len(args) == 4:
             super().__init__(args)
-# Color scheme created in https://kuler.adobe.com/
-# colorDark = Color(0x5E7F68)
-# colorLight = Color(0xE1FFEA)
-# colorTitle = Color(0x387F4C)
-# colorSubTitle = Color(0x5ACC7A)
-# colorActive = Color(0x70FF98)
-# colorFontLight = Color(0xffffff)
-# colorTextInput = Color(0xdddddd)
-# colorFontDark = Color(0x222222)
-# colorFontDarkHint = Color(0x333333)
-# colorFocus = Color(0x70FF98)
 
 colorDark = Color(0x333333)
 colorLight = Color(0x666666)
@@ -42,3 +31,8 @@ colorFocus = Color(0x7F3B63)
 fontSizeDefault = 14
 fontSizeTitle = 16
 fontSizeSmall = 12
+fontSizeTitle = 16
+fontSizeSubTitle = 14
+
+heightTitle = 18
+heightSubTitle = 16

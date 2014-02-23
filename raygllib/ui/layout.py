@@ -1,5 +1,5 @@
 from .base import LayoutDirection
-from raygllib import utils
+# from raygllib import utils
 
 HORIZONTAL = LayoutDirection.HORIZONTAL
 VERTICAL = LayoutDirection.VERTICAL
@@ -13,20 +13,19 @@ def _dump_widget_tree(widget, extra, indent=0):
         _dump_widget_tree(child, extra, indent + 4)
 
 
-def preorder_traversal(widget):
-    yield widget
-    for child in widget.children:
-        child.parent = widget
-        yield from preorder_traversal(child)
-
-
 class LayoutManager:
     def __init__(self, rootWidget):
         self.root = rootWidget
         self.widgets = []
 
+    def move(self, dx, dy):
+        for widget in self.widgets:
+            widget.x += dx
+            widget.y += dy
+            widget.on_relayout()
+
     def relayout(self):
-        widgets = self.widgets = list(preorder_traversal(self.root))
+        widgets = self.widgets = list(self.root.preorder_traverse(True))
         nWidgets = len(widgets)
         fixedW = [0] * nWidgets
         fixedH = [0] * nWidgets
@@ -89,7 +88,6 @@ class LayoutManager:
                     set_size(j, fixed[j] + vary1 * vary[j], fixed, vary, matchDir, attr)
 
             setattr(widget, attr, total)
-
 
         # _dump_widget_tree(widgets[0], extra_info)
 

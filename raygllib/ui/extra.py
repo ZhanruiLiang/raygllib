@@ -261,7 +261,7 @@ class Title(Label):
     properties = join_props(Label.properties, [
         ('fixedSize', True),
         ('fontSize', 15),
-        ('height', 18),
+        ('height', theme.heightTitle),
         ('color', theme.colorFontLight.copy()),
         ('backColor', theme.colorTitle.copy()),
         ('align', TextAlign.CENTER),
@@ -280,8 +280,8 @@ class Title(Label):
 class SubTitle(Title):
     properties = join_props(Title.properties, [
         ('backColor', theme.colorSubTitle.copy()),
-        ('fontSize', 14),
-        ('height', 16),
+        ('fontSize', theme.fontSizeSubTitle),
+        ('height', theme.heightSubTitle),
         ('align', TextAlign.LEFT),
     ])
 

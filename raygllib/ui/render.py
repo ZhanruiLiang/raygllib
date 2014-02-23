@@ -74,6 +74,11 @@ class RectRender(Render):
         self.set_matrix_uniform()
         self.draw(gl.GL_POINTS, nRects)
 
+    def free(self):
+        self.psBuffer.free()
+        self.colorBuffer.free()
+        super().free()
+
 
 class FontTexture(gl.Texture2D):
     MIN_FILTER = gl.GL_LINEAR_MIPMAP_LINEAR
@@ -101,6 +106,12 @@ class FontRender(Render):
         self.pcsBuffer = gl.DynamicVertexBuffer()
         self.colorBuffer = gl.DynamicVertexBuffer()
         self.textureUnit = gl.TextureUnit(0)
+
+    def free(self):
+        self.pcsBuffer.free()
+        self.colorBuffer.free()
+        self.fontTexture.free()
+        super().free()
 
     def set_texture(self, texture):
         gl.glActiveTexture(self.textureUnit.glenum)

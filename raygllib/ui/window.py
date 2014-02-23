@@ -42,6 +42,7 @@ class FocusRect(RectShape):
 
     def update(self, dt):
         if self.target:
+            self.target.teach_properties(self, ('x', 'y', 'width', 'height'))
             T = self.BLINK_INTERVAL
             t = self._time
             if t < T / 2:
@@ -68,7 +69,6 @@ class FocusRect(RectShape):
 
     def on_relayout(self):
         if self.target:
-            self.target.teach_properties(self, ('x', 'y', 'width', 'height'))
             if isinstance(self.target, Canvas):
                 self.height = self.HEIGHT_ON_CANVAS
 
@@ -76,6 +76,7 @@ class FocusRect(RectShape):
 class Window(pyglet.window.Window):
     KEY_REPEAT_INTERVAL = 0.04
     KEY_REPEAT_DELAY = 0.4
+    FPS = 30
 
     def __init__(self,
             vsync=True, config=pyglet.gl.Config(sample_buffers=1, samples=4),
@@ -96,6 +97,7 @@ class Window(pyglet.window.Window):
 
         self._shortcuts = {}
         self._shortcutId = 0
+        self._dialogs = []
 
         self.focus = None
         self._focusRect = FocusRect()
@@ -153,6 +155,13 @@ class Window(pyglet.window.Window):
         self.request_relayout()
         self._fontRender.set_screen_size(w, h)
         self._rectRender.set_screen_size(w, h)
+        for dialog in self._dialogs:
+            dialog.on_resize(w, h)
+
+    def on_context_lost(self):
+        self._fontRender.free()
+        self._rectRender.free()
+        super.on_context_lost()
 
     def on_key_press(self, symbol, modifiers, _is_repeat=False):
         # print(symbol, modifiers)
@@ -172,14 +181,14 @@ class Window(pyglet.window.Window):
         self._pressing = None
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        self._handle_mouse_event('on_mouse_drag', x, y, dx, dy, buttons, modifiers)
+        self._handle_mouse_event('on_mouse_drag', x, y, dx, -dy, buttons, modifiers)
 
     def on_mouse_motion(self, x, y, dx, dy):
         for widget in self._locate_widget_at(x, self.height - y):
             if widget.focusable:
                 self.set_focus(widget)
                 break
-        self._handle_mouse_event('on_mouse_motion', x, y, dx, dy)
+        self._handle_mouse_event('on_mouse_motion', x, y, dx, -dy)
 
     def on_mouse_press(self, x, y, button, modifiers):
         self._handle_mouse_event('on_mouse_press', x, y, button, modifiers)
@@ -195,11 +204,19 @@ class Window(pyglet.window.Window):
 
     def relayout(self):
         self._needRelayout = False
+        self._collect()
         self._layoutManager.relayout()
         self._focusRect.on_relayout()
-        self._collect(self._layoutManager.widgets)
+
+    def update_dialogs(self):
+        nDialogs = len(self._dialogs)
+        self._dialogs = [dialog for dialog in self._dialogs if not dialog._needClose]
+        if nDialogs != len(self._dialogs):
+            self.set_focus(None)
+            self.request_relayout()
 
     def update(self, dt):
+        self.update_dialogs()
         if self._needRelayout:
             self.relayout()
         self._focusRect.update(dt)
@@ -210,17 +227,24 @@ class Window(pyglet.window.Window):
                 self.on_key_press(symbol, modifiers, _is_repeat=True)
                 self._keyRepeatColdDown += self.KEY_REPEAT_INTERVAL
 
-    def _collect(self, widgets):
-        self._widgets = widgets
-        self._textboxes = list(collect_textboxes(self.root))
-        self._rects = list(collect_rects(self.root))
-        self._canvases = list(collect_canvases(self.root))
+    def _collect(self):
+        self._widgets = []
+        self._textboxes = []
+        self._rects = []
+        self._canvases = []
+        self.root.request_relayout = self.request_relayout
+        for widget in [self.root] + self._dialogs:
+            widgets = list(widget.preorder_traverse(True))
+            for widget1 in self.root.preorder_traverse():
+                widget1.request_relayout = widget.request_relayout
+            self._widgets.extend(widgets)
+            self._make_focus_chain(widgets)
+            self._textboxes.extend(collect_textboxes(widget))
+            self._rects.extend(collect_rects(widget))
+            self._canvases.extend(collect_canvases(widget))
         self._rects.append(self._focusRect)
-        self._make_focus_chain()
-        for widget in widgets:
-            widget.request_relayout = self.request_relayout
 
-    def _make_focus_chain(self):
+    def _make_focus_chain(self, widgets):
         widgets = [widget for widget in self._widgets if widget.focusable]
         for i in range(len(widgets)):
             widgets[i]._prevFocus = widgets[i - 1]
@@ -254,3 +278,10 @@ class Window(pyglet.window.Window):
                 int(canvas.height),
             )
             canvas.draw()
+
+    def add_dialog(self, dialog):
+        self._dialogs.append(dialog)
+
+    def start(self):
+        pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
+        pyglet.app.run()

@@ -27,9 +27,7 @@ class PropsControl(ui.Widget):
             label = ui.Label(
                 text=name, align=ui.TextAlign.RIGHT, wrap=True, fixedSize=True, width=80)
             self.propWidgets[name] = edit = cls(**attrs)
-            self.children.append(ui.Widget(
-                layoutDirection=HORIZONTAL,
-                children=[label, edit]))
+            self.children.append(ui.make_hbox(children=[label, edit]))
 
 class PositionControl(ui.Widget):
     def __init__(self, var, valRange):
@@ -109,14 +107,14 @@ class EdgesControl(ui.Widget):
         insertButton = ui.Button(text='Insert', fixedSize=True, width=BUTTON_WIDTH)
         removeButton = ui.Button(text='Remove', fixedSize=True, width=BUTTON_WIDTH)
         copyButton = ui.Button(text='Copy', fixedSize=True, width=BUTTON_WIDTH)
-        self.children.append(ui.Widget(
-            layoutDirection=HORIZONTAL, fixedSize=True, height=18,
+        self.children.append(ui.make_hbox(
+            fixedSize=True, height=18,
             children=[enable, insertButton, removeButton, copyButton]))
         insertButton.connect_signal('clicked', self.insert_edge, .5)
         removeButton.connect_signal('clicked', self.remove_edge)
         copyButton.connect_signal('clicked', self.copy)
         # Edges controllers
-        self.edgeList = ui.Widget(layoutDirection=VERTICAL)
+        self.edgeList = ui.make_vbox()
         edges = viewer.canvas.renderer.toonRenderEdges
         viewer.canvas.renderer.toonRenderEdges = []
         for e in edges:
@@ -216,8 +214,8 @@ class Group(ui.Panel):
 class ControlPanel(ui.Widget):
     def __init__(self, fixedSize=False, width=400, **kwargs):
         super().__init__(layoutDirection=HORIZONTAL, **kwargs)
-        self._col1 = ui.Widget(fixedSize=True, width=300)
-        # self._col2 = ui.Widget(fixedSize=True, width=200)
+        self._col1 = ui.make_vbox(fixedSize=True, width=300)
+        # self._col2 = ui.make_vbox(fixedSize=True, width=200)
         self.children.append(self._col1)
         # self.children.append(self._col2)
         self.clear()
