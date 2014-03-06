@@ -169,6 +169,7 @@ class FontRender(Render):
         y0 = textbox.y
         w = textbox.width
         h = textbox.height
+        autoResize = textbox.autoResize
         # Init buffer
         buffer = np.zeros((nChars, 8), dtype=gl.GLfloat)
         buffer[:, 3] = textbox.fontSize
@@ -177,6 +178,7 @@ class FontRender(Render):
         wrapNum = int(w // tw) if textbox.wrap else 0
         y = y0 + th / 2
         id = 0
+        maxX = x0
         for line in self._iter_lines(text, wrapNum):
             n = len(line)
             for i, c in enumerate(line):
@@ -190,14 +192,20 @@ class FontRender(Render):
                 xs += (w - tw * n) / 2
             elif textbox.align is TextAlign.RIGHT:
                 xs += w - tw * n
+            if len(xs):
+                maxX = max(maxX, xs[-1])
             buffer[id:id + n, 0] = xs
             buffer[id:id + n, 1] = y
             y += th
             id += n
-            if y - th / 2 > h:
+            if not autoResize and y - th / 2 > h:
                 break
         buffer = buffer[:id]
         actualHeight = (y - th / 2 - y0)
+        actualWidth = maxX + tw / 2 - x0
+        # if autoResize:
+        #     textbox.width = actualWidth
+        #     textbox.height = actualHeight
         if textbox.halign == TextHAlign.CENTER:
             buffer[:, 1] += (h - actualHeight) / 2
         elif textbox.halign == TextHAlign.BOTTOM:

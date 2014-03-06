@@ -68,6 +68,8 @@ class GLResource:
 class Texture2D(GLResource):
     MAG_FILTER = GL_LINEAR
     MIN_FILTER = GL_LINEAR_MIPMAP_LINEAR
+    WRAP_S = GL_REPEAT
+    WRAP_T = GL_REPEAT
 
     def __init__(self, image):
         GLResource.__init__(self)
@@ -77,12 +79,15 @@ class Texture2D(GLResource):
         textureId = self.make_texture(self.image)
         del self.image
         glBindTexture(GL_TEXTURE_2D, textureId)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        self.configure()
+        return textureId
+
+    def configure(self):
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, self.WRAP_S)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, self.WRAP_T)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, self.MAG_FILTER)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, self.MIN_FILTER)
         glGenerateMipmap(GL_TEXTURE_2D)
-        return textureId
 
     def dealloc(self):
         glDeleteTextures([self.glId])

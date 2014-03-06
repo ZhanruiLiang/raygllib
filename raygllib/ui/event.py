@@ -14,7 +14,7 @@ class EventHandler:
     def on_mouse_press(self, x, y, button, modifiers):
         pass
 
-    def on_mouse_scroll(self, x, y, button, modifiers):
+    def on_mouse_scroll(self, x, y, xs, ys):
         pass
 
     def on_mouse_release(self, x, y, button, modifiers):

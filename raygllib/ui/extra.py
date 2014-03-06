@@ -82,6 +82,7 @@ class Button(Widget):
     signals = ['clicked']
 
     def __init__(self, *args, **kwargs):
+        self.rect = RectShape()
         super().__init__(*args, **kwargs)
 
         self.textbox = TextBox(
@@ -89,8 +90,15 @@ class Button(Widget):
             fontSize=self.fontSize)
         self.textboxes.append(self.textbox)
 
-        self.rect = RectShape(color=self.color)
         self.rects.append(self.rect)
+
+    @property
+    def color(self):
+        return self.rect.color
+
+    @color.setter
+    def color(self, color):
+        self.rect.color = color
 
     def on_relayout(self):
         super().on_relayout()

@@ -43,6 +43,8 @@ class FocusRect(RectShape):
     def update(self, dt):
         if self.target:
             self.target.teach_properties(self, ('x', 'y', 'width', 'height'))
+            if isinstance(self.target, Canvas):
+                self.height = self.HEIGHT_ON_CANVAS
             T = self.BLINK_INTERVAL
             t = self._time
             if t < T / 2:
@@ -61,10 +63,6 @@ class FocusRect(RectShape):
     @target.setter
     def target(self, target):
         self._target = target
-        if target:
-            target.teach_properties(self, ('x', 'y', 'width', 'height'))
-            if isinstance(self.target, Canvas):
-                self.height = self.HEIGHT_ON_CANVAS
         self._time = 0
 
     def on_relayout(self):
@@ -193,8 +191,8 @@ class Window(pyglet.window.Window):
     def on_mouse_press(self, x, y, button, modifiers):
         self._handle_mouse_event('on_mouse_press', x, y, button, modifiers)
 
-    def on_mouse_scroll(self, x, y, button, modifiers):
-        self._handle_mouse_event('on_mouse_scroll', x, y, button, modifiers)
+    def on_mouse_scroll(self, x, y, scrollX, scrollY):
+        self._handle_mouse_event('on_mouse_scroll', x, y, scrollX, scrollY)
 
     def on_mouse_release(self, x, y, button, modifiers):
         self._handle_mouse_event('on_mouse_release', x, y, button, modifiers)
@@ -262,13 +260,6 @@ class Window(pyglet.window.Window):
         gl.glClearColor(*self.color)
         self.clear()
         root = self.root
-        gl.glViewport(0, 0, int(self.root.width), int(self.root.height))
-
-        with self._rectRender.batch_draw():
-            self._rectRender.draw_rects(self._rects)
-
-        with self._fontRender.batch_draw():
-            self._fontRender.draw_textboxs(self._textboxes)
 
         for canvas in self._canvases:
             gl.glViewport(
@@ -279,9 +270,16 @@ class Window(pyglet.window.Window):
             )
             canvas.draw()
 
+        gl.glViewport(0, 0, int(self.root.width), int(self.root.height))
+        with self._rectRender.batch_draw():
+            self._rectRender.draw_rects(self._rects)
+        with self._fontRender.batch_draw():
+            self._fontRender.draw_textboxs(self._textboxes)
+
     def add_dialog(self, dialog):
         self._dialogs.append(dialog)
 
     def start(self):
         pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
         pyglet.app.run()
+        pyglet.clock.unschedule(self.update)

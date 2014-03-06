@@ -12,10 +12,11 @@ def timeit(func):
     @functools.wraps(func)
     def newfunc(*args, **kwargs):
         startTime = time.time()
-        func(*args, **kwargs)
+        result = func(*args, **kwargs)
         elapsedTime = time.time() - startTime
         debug('function [{}] finished in {} ms'.format(
             func.__name__, int(elapsedTime * 1000)), file=sys.stderr)
+        return result
     return newfunc
 
 @contextmanager
