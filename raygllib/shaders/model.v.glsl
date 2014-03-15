@@ -40,10 +40,10 @@ void main() {
     weight = 0;
     if(hasArmature) {
         mat4 jointMat = 
-              vertexWeights.x * jointMats[int(.1 + vertexJointIds.x)]
-            + vertexWeights.y * jointMats[int(.1 + vertexJointIds.y)]
-            + vertexWeights.z * jointMats[int(.1 + vertexJointIds.z)]
-            + vertexWeights.w * jointMats[int(.1 + vertexJointIds.w)];
+              vertexWeights.x * jointMats[int(.5 + vertexJointIds.x)]
+            + vertexWeights.y * jointMats[int(.5 + vertexJointIds.y)]
+            + vertexWeights.z * jointMats[int(.5 + vertexJointIds.z)]
+            + vertexWeights.w * jointMats[int(.5 + vertexJointIds.w)];
         mat = viewMat * jointMat * modelMat;
         /*show_weight();*/
     } else {

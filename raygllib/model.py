@@ -276,10 +276,10 @@ class Axis(Model):
 def load_scene(path):
     mesh = collada.Collada(path)
     scene = Scene()
-    joints = None
-
+    jointRoots = {}
     for node in mesh.scene.nodes:
         matrix = node.matrix
+        name = node.xmlnode.attrib.get('name', None)
         node = node.children[0]
         # debug(type(node))
         if isinstance(node, collada.scene.CameraNode):
@@ -327,6 +327,8 @@ def load_scene(path):
             weights = weights[vertexIds]
             jointIds = jointIds[vertexIds]
             # Make joints
+            # import pdb; pdb.set_trace()
+            joints = jointRoots[controller.xmlnode.attrib['name'].replace('.', '_')]
             for joint in joints:
                 joint.invBindMatrix =\
                     controller.joint_matrices[joint.name.encode('utf-8')]
@@ -358,15 +360,16 @@ def load_scene(path):
             type = attrib.get('type', '') or attrib.get('TYPE')
             if type.lower() == 'joint':
                 joints = []
-                build_joint_hierachy(node, None, joints)
+                build_joint_hierachy(node, matrix, None, joints)
+                jointRoots[name] = joints
     return scene
 
 
-def build_joint_hierachy(node, parent, joints):
-    joint = Joint(node.xmlnode.attrib['sid'], parent, None, node.matrix)
+def build_joint_hierachy(node, matrix, parent, joints):
+    joint = Joint(node.xmlnode.attrib['sid'], parent, None, matrix.dot(node.matrix))
     joints.append(joint)
     for subNode in node.children:
-        build_joint_hierachy(subNode, joint, joints)
+        build_joint_hierachy(subNode, np.eye(4, dtype=np.float32), joint, joints)
 
 
 def build_geometry(scene, mesh, geometryCollada):

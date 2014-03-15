@@ -117,6 +117,7 @@ class DynamicVertexBuffer(GLResource):
     def __init__(self, usageHint=GL_DYNAMIC_DRAW):
         super().__init__()
         self.usageHint = usageHint
+        self._len = 0
 
     def allocate(self):
         id = glGenBuffers(1)
@@ -126,8 +127,12 @@ class DynamicVertexBuffer(GLResource):
         glDeleteBuffers(1, [self.glId])
 
     def set_data(self, data):
+        self._len = len(data)
         glBindBuffer(GL_ARRAY_BUFFER, self.glId)
         glBufferData(GL_ARRAY_BUFFER, data, self.usageHint)
+
+    def __len__(self):
+        return self._len
 
 
 class VertexBuffer(GLResource):

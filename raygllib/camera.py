@@ -107,6 +107,7 @@ class Camera:
         self._gen_proj_mat()
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        dy = -dy
         r = np.sqrt(dx * dx + dy * dy)
         # if r < 2: return
         iy = self.up

@@ -336,8 +336,6 @@ class Viewer(ui.Window):
         self.root.children.append(self.panel)
         self.root.children.append(self.canvas)
 
-        pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
-
     def load_scene(self, path):
         scene = Scene.load(path)
         if not scene.lights:
