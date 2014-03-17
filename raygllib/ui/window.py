@@ -1,7 +1,7 @@
 import pyglet
 
 import raygllib.gllib as gl
-from .base import Widget, Canvas, RectShape, join_props
+from . import Widget, Canvas, RectShape, join_props
 from .event import EVENT_HANDLED, EVENT_UNHANDLED
 from .render import RectRender, FontRender
 from .theme import Color

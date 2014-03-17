@@ -4,6 +4,7 @@ from .base import (
 from . import key as K
 from . import theme
 from .event import EVENT_HANDLED
+from .render import BackgroundRender
 
 
 class Panel(Widget):
@@ -292,6 +293,25 @@ class SubTitle(Title):
         ('height', theme.heightSubTitle),
         ('align', TextAlign.LEFT),
     ])
+
+
+class Canvas(Widget):
+    properties = join_props(Widget.properties, [
+        ('solid', True),
+        ('focusable', True),
+        ('color', theme.Color(0x111111)),
+    ])
+
+    backgroundRender = BackgroundRender() 
+
+    def draw(self):
+        self.fill_background()
+
+    def fill_background(self):
+        r = self.backgroundRender
+        with r.batch_draw():
+            r.set_color(self.color)
+            r.draw_background()
 
 # def command(func):
 #     func.isCommand = True

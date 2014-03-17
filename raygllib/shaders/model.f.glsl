@@ -88,7 +88,7 @@ void main() {
         float d = multi_step(clamp(dot(lightVectorCamSpace, normalCamSpace1), 0, 1));
         float s = multi_step(clamp(dot(-reflectLightVectorCamSpace, eyeVectorCamSpace), 0, 1));
 
-        fragColor += mtlDiffuseColor * intensity * d + intensity * Ks * pow(s, shininess);
+        fragColor += intensity * (mtlDiffuseColor * d + Ks * pow(s, shininess));
     }
     /*fragColor = fragColor * 0.5 + vec3(weight, 0, 0);*/
 }

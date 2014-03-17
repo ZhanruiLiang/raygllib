@@ -279,7 +279,7 @@ def load_scene(path):
     jointRoots = {}
     for node in mesh.scene.nodes:
         matrix = node.matrix
-        name = node.xmlnode.attrib.get('name', None)
+        nodeName = node.xmlnode.attrib.get('name', None)
         node = node.children[0]
         # debug(type(node))
         if isinstance(node, collada.scene.CameraNode):
@@ -289,8 +289,8 @@ def load_scene(path):
         elif isinstance(node, collada.scene.GeometryNode):
             geometry = build_geometry(scene, mesh, node.geometry)
             scene.geometries.append(geometry)
-            model = Model(geometry.name, geometry, matrix)
-            scene.models.append(model)
+            model = Model(nodeName, geometry, matrix)
+            scene.add_model(model)
         elif isinstance(node, collada.scene.ControllerNode):
             controller = node.controller
             geom = node.controller.geometry
@@ -347,10 +347,9 @@ def load_scene(path):
             # debug('model matrix', matrix)
             matrix = controller.bind_shape_matrix
             # debug('bind_shape_matrix', matrix)
-            model = ArmaturedModel(
-                geometry.name, geometry, matrix, weights, jointIds, joints)
+            model = ArmaturedModel(nodeName, geometry, matrix, weights, jointIds, joints)
 
-            scene.models.append(model)
+            scene.add_model(model)
         elif isinstance(node, collada.scene.LightNode):
             daeLight = node.light
             light = Light(matrix[0:3, 3], daeLight.color, config.defaultLightPower)
@@ -361,7 +360,7 @@ def load_scene(path):
             if type.lower() == 'joint':
                 joints = []
                 build_joint_hierachy(node, matrix, None, joints)
-                jointRoots[name] = joints
+                jointRoots[nodeName] = joints
     return scene
 
 
@@ -416,8 +415,19 @@ class Scene:
 
     def __init__(self):
         self.lights = []
-        self.models = []
+        self._models = {}
         self.geometries = []
+
+    @property
+    def models(self):
+        return self._models.values()
+
+    def add_model(self, model):
+        assert model.name not in self._models
+        self._models[model.name] = model
+
+    def pop_model(self, name):
+        self._models.pop(name)
 
     def get_model(self, name):
         for model in self.models:
@@ -435,8 +445,8 @@ class Scene:
             geometry.free()
         for model in self.models:
             model.free()
-        self.models = []
-        self.lights = []
+        self._models.clear()
+        self.lights.clear()
 
     def update(self, dt):
         for model in self.models:

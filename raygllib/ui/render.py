@@ -215,3 +215,21 @@ class FontRender(Render):
     @staticmethod
     def get_char_size(fontSize):
         return (fontSize // 2 + 2, fontSize)
+
+class BackgroundRender(gl.Program):
+    def __init__(self):
+        super().__init__([
+            (get_resouce_path('shaders', 'background.v.glsl'), gl.GL_VERTEX_SHADER),
+            (get_resouce_path('shaders', 'background.f.glsl'), gl.GL_FRAGMENT_SHADER),
+        ], [
+            ('vertexPos', 2, gl.GL_FLOAT)
+        ])
+        rect = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+        self.__buffer = gl.VertexBuffer(np.array(rect, dtype=gl.GLfloat))
+
+    def set_color(self, color):
+        gl.glUniform4fv(self.get_uniform_loc('color'), 1, color)
+
+    def draw_background(self):
+        self.set_buffer('vertexPos', self.__buffer)
+        self.draw(gl.GL_TRIANGLE_STRIP, 4)

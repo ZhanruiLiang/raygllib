@@ -143,7 +143,7 @@ class EdgesControl(ui.Widget):
 
     def remove_edge(self):
         edges = self.viewer.canvas.renderer.toonRenderEdges
-        if len(edges > 1):
+        if len(edges) > 1:
             edges.pop()
             self.edgeList.children.pop()
             self.edgeList.request_relayout()
@@ -154,13 +154,20 @@ class JointControl(ui.Widget):
         super().__init__(layoutDirection=VERTICAL)
         self.children.append(ui.SubTitle(text='##Joints Control'))
         self.viewer = viewer
-        self.joints = joints
-        for joint in sorted(joints, key=lambda joint: joint.name):
+        self.joints = joints[:]
+        self.joints.sort(key=lambda joint: joint.name)
+        self.scales = []
+        for joint in self.joints:
             scale = ui.Spin(
-                text=joint.name, value=0, minValue=-180, maxValue=180, digits=1,
+                text=joint.name, value=joint.angle, minValue=-180, maxValue=180, digits=1,
                 fixedSize=False, height=18, fontSize=14)
             scale.connect_signal('value-changed', self.update_angle, scale, joint)
             self.children.append(scale)
+            self.scales.append(scale)
+
+    def sync(self):
+        for scale, joint in zip(self.scales, self.joints):
+            scale.update_value(joint.angle / math.pi * 180, False)
 
     def update_angle(self, scale, joint):
         self.viewer.selectedJoint = joint
@@ -279,11 +286,13 @@ class ViewerCanvas(ui.Canvas):
     def draw(self):
         scene = self.scene
         camera = self.camera
-        models = scene.models
 
         R = self.renderer
         Rs = self.silhouetteRenderer
         # Rw = self.wireframeRenderer
+
+        self.fill_background()
+
         glEnable(GL_DEPTH_TEST)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         # glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
@@ -299,7 +308,7 @@ class ViewerCanvas(ui.Canvas):
             R.set_matrix('projMat', camera.projMat)
             # print(camera.projMat.dot(camera.viewMat).dot([0, 0, 0, 1]))
             R.set_lights(scene.lights)
-            for model in models:
+            for model in scene.models:
                 R.draw_model(model)
 
         if self.silhouetteEnable:
@@ -307,7 +316,7 @@ class ViewerCanvas(ui.Canvas):
                 Rs.set_matrix('viewMat', camera.viewMat)
                 Rs.set_matrix('projMat', camera.projMat)
                 glUniform1f(Rs.get_uniform_loc('edgeWidth'), self.silhouetteWidth)
-                for model in models:
+                for model in scene.models:
                     Rs.draw_model(model)
 
         # if self.wireframeEnable:
@@ -330,6 +339,7 @@ class Viewer(ui.Window):
 
         self.panel = ControlPanel()
         self.canvas = ViewerCanvas()
+        self._jointControl = None
 
         self.root.layoutDirection = HORIZONTAL
         self.root.color = self.color.copy()
@@ -340,8 +350,9 @@ class Viewer(ui.Window):
         scene = Scene.load(path)
         if not scene.lights:
             scene.add_light()
-        if scene.models:
-            self.camera.set_target(scene.models[0])
+        for model in scene.models:
+            self.camera.set_target(model)
+            break
         self.set_scene(scene)
 
     @property
@@ -376,10 +387,14 @@ class Viewer(ui.Window):
         for model in scene.models:
             if hasattr(model, 'joints'):
                 joints.extend(model.joints)
-        panel.add_control('joints', JointControl(self, joints))
+        jointControl = JointControl(self, joints)
+        panel.add_control('joints', jointControl)
+        self._jointControl = jointControl
         self.request_relayout()
 
     def update(self, dt):
         super().update(dt)
         self.camera.update(dt)
         self.scene.update(dt)
+        if self._jointControl:
+            self._jointControl.sync()
