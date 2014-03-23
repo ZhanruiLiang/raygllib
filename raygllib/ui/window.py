@@ -265,8 +265,8 @@ class Window(pyglet.window.Window):
             gl.glViewport(
                 int(canvas.x),
                 int(root.height - (canvas.y + canvas.height)),
-                int(canvas.width), 
-                int(canvas.height),
+                max(0, int(canvas.width)), 
+                max(0, int(canvas.height)),
             )
             canvas.draw()
 

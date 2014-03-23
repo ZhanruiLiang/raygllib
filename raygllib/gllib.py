@@ -212,7 +212,7 @@ class Program(GLResource):
         # Make VAO
         self._buffers = {}
         self.vao = glGenVertexArrays(1)
-        glBindVertexArray(self.vao)
+        # glBindVertexArray(self.vao)
 
         # Make buffer slots
         for name, size, type in self.bufs:
@@ -236,7 +236,7 @@ class Program(GLResource):
     @contextmanager
     def batch_draw(self):
         self.use()
-        glBindVertexArray(self.vao)
+        # glBindVertexArray(self.vao)
         self.enable_attribs()
         self.prepare_draw()
         yield

@@ -280,6 +280,11 @@ def load_scene(path):
     for node in mesh.scene.nodes:
         matrix = node.matrix
         nodeName = node.xmlnode.attrib.get('name', None)
+        if not node.children:
+            if nodeName is not None:
+                # An empty node
+                scene.add_empty_node(nodeName, matrix)
+            continue
         node = node.children[0]
         # debug(type(node))
         if isinstance(node, collada.scene.CameraNode):
@@ -417,6 +422,7 @@ class Scene:
         self.lights = []
         self._models = {}
         self.geometries = []
+        self._emptyNodes = {}
 
     @property
     def models(self):
@@ -454,3 +460,10 @@ class Scene:
 
     def __del__(self):
         self.free()
+
+    def add_empty_node(self, name, matrix):
+        self._emptyNodes[name] = matrix
+
+    def get_empty_node_pos(self, name):
+        matrix = self._emptyNodes[name]
+        return matrix[0:3, 3] / matrix[3, 3]
